@@ -3,6 +3,6 @@ services:
     name: emailservice
     runtime: docker
     plan: starter
-    autoDeploy: true
+    autoDeploy: false
     healthCheckPath: /health
     dockerfilePath: ./Dockerfile

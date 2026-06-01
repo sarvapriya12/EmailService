@@ -18,10 +18,12 @@ Updates made so far:
 - Updated the GitHub Actions workflow to support manual runs, set read-only permissions, and cancel duplicate in-progress runs.
 - Added an AWS deployment workflow at `.github/workflows/deploy-apprunner.yml` for ECR push and App Runner deployment.
 - Added `AWS_DEPLOYMENT.md` with the one-time AWS setup and required GitHub variables/secrets.
+- Removed the AWS App Runner workflow after switching the deployment target to Render.
 - Added `email-validator` to `requirements.txt` and normalized the file ending.
 - Normalized `requirements.txt` to remove duplicate dependency blocks and keep a single clean list.
 - Added `render.yaml` for deploying the FastAPI app to Render with the existing Dockerfile and `/health` endpoint.
 - Shifted the deployment target from AWS App Runner to Render for the next hosting step.
+- Updated the CI workflow to support a Render deploy hook on push.
 
 Notes:
 - The current app still uses the existing single-email processing flow.

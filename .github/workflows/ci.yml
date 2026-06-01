@@ -37,7 +37,6 @@ jobs:
         run: |
           python - <<'PY'
           from main import app
-
           routes = {route.path for route in app.routes if hasattr(route, 'path')}
           assert "/health" in routes
           assert "/" in routes
@@ -49,3 +48,13 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t lanchain-projects:ci .
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    steps:
+      - name: Trigger Render deploy
+        run: |
+          curl -f -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
