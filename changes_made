@@ -19,6 +19,7 @@ Updates made so far:
 - Added an AWS deployment workflow at `.github/workflows/deploy-apprunner.yml` for ECR push and App Runner deployment.
 - Added `AWS_DEPLOYMENT.md` with the one-time AWS setup and required GitHub variables/secrets.
 - Added `email-validator` to `requirements.txt` and normalized the file ending.
+- Normalized `requirements.txt` to remove duplicate dependency blocks and keep a single clean list.
 
 Notes:
 - The current app still uses the existing single-email processing flow.
