@@ -58,8 +58,12 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
         logger.info("MESSAGE DATA: %s", message_data)
 
         if message_data.get("status") == "failed":
-            logger.error("GMAIL FETCH FAILED: %s", message_data)
-            raise HTTPException(status_code=503, detail=message_data.get("error", "Failed to fetch Gmail message"))
+            print("GMAIL FETCH FAILED:", message_data)
+
+            return {
+                "status": "ignored",
+                "reason": message_data.get("error")
+            }
 
         pipeline = EmailPipelineService(gmail=gmail)
         processing_result = pipeline.process_incoming_email(
