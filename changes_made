@@ -1,0 +1,21 @@
+Changes Made
+
+Date: 2026-06-01
+
+Current status:
+- No code has been pushed to GitHub yet.
+- All changes listed below are local workspace changes only.
+
+Updates made so far:
+- Added a production-friendly FastAPI app factory in `main.py`.
+- Added `/` and `/health` routes for deployment checks.
+- Added a `Dockerfile` for container-based deployment.
+- Added `.dockerignore` to keep build images clean.
+- Added `pydantic-settings` to `pyproject.toml` for settings loading.
+- Added `pydantic-settings` to `requirements.txt` so container installs match runtime imports.
+- Added a GitHub Actions CI workflow at `.github/workflows/ci.yml`.
+- The workflow installs dependencies, sanity-checks the FastAPI app, compiles the Python sources, and builds the Docker image.
+
+Notes:
+- The current app still uses the existing single-email processing flow.
+- Future roadmap items like GitHub Actions, AWS deployment, Pub/Sub, and Gmail watch will be handled step by step.
