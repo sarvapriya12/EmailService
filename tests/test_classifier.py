@@ -40,3 +40,27 @@ def test_classify_defaults_to_general_inquiry_when_category_is_missing() -> None
     assert result["category"] == "general_inquiry"
     assert result["reason"] == "This is a follow-up about my account."
     assert result["raw_response"] == "This is a follow-up about my account."
+
+
+def test_parse_category_handles_uppercase_billing_response() -> None:
+    classifier = EmailClassifier(router=StubRouter("billing"))
+
+    result = classifier._parse_category("BILLING - uppercase response")
+
+    assert result == "billing"
+
+
+def test_parse_category_defaults_to_general_inquiry_for_empty_response() -> None:
+    classifier = EmailClassifier(router=StubRouter("billing"))
+
+    result = classifier._parse_category("")
+
+    assert result == "general_inquiry"
+
+
+def test_parse_category_returns_general_inquiry_for_hyphenated_feature_request() -> None:
+    classifier = EmailClassifier(router=StubRouter("billing"))
+
+    result = classifier._parse_category("feature-request - user wants dark mode")
+
+    assert result == "general_inquiry"

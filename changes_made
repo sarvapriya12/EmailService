@@ -25,6 +25,8 @@ Updates made so far:
 - Shifted the deployment target from AWS App Runner to Render for the next hosting step.
 - Updated the CI workflow to support a Render deploy hook on push.
 - Added a `tests/` package with focused classifier tests for prompt construction and category parsing.
+- Added `tests/__init__.py` so the tests directory is tracked as a Python package.
+- Fixed the CI workflow test job so it installs `pytest` and runs tests with the GitHub Actions Python runtime.
 
 Notes:
 - The current app still uses the existing single-email processing flow.
