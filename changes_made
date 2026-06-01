@@ -15,6 +15,7 @@ Updates made so far:
 - Added `pydantic-settings` to `requirements.txt` so container installs match runtime imports.
 - Added a GitHub Actions CI workflow at `.github/workflows/ci.yml`.
 - The workflow installs dependencies, sanity-checks the FastAPI app, compiles the Python sources, and builds the Docker image.
+- Updated the GitHub Actions workflow to support manual runs, set read-only permissions, and cancel duplicate in-progress runs.
 
 Notes:
 - The current app still uses the existing single-email processing flow.
