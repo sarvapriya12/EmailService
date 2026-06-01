@@ -18,6 +18,7 @@ Updates made so far:
 - Updated the GitHub Actions workflow to support manual runs, set read-only permissions, and cancel duplicate in-progress runs.
 - Added an AWS deployment workflow at `.github/workflows/deploy-apprunner.yml` for ECR push and App Runner deployment.
 - Added `AWS_DEPLOYMENT.md` with the one-time AWS setup and required GitHub variables/secrets.
+- Added `email-validator` to `requirements.txt` and normalized the file ending.
 
 Notes:
 - The current app still uses the existing single-email processing flow.

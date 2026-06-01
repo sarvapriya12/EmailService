@@ -24,3 +24,5 @@ tiktoken
 
 azure-identity
 azure-core
+
+email-validator
