@@ -164,8 +164,9 @@ class GmailService:
             message_ids = self._collect_message_ids_since(history_id)
 
             if not message_ids:
+                logger.info("No new messages for history_id=%s — skipping", history_id)
                 return {
-                    "status": "failed",
+                    "status": "no_new_messages",
                     "error": "No new Gmail messages were found for the supplied history ID",
                 }
 

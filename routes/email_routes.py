@@ -57,13 +57,12 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
         message_data = gmail.fetch_latest_message_since(notification_data["history_id"])
         logger.info("MESSAGE DATA: %s", message_data)
 
-        if message_data.get("status") == "failed":
-            print("GMAIL FETCH FAILED:", message_data)
-
+        if message_data.get("status") in ("failed", "no_new_messages"):
+            logger.info("Skipping push — reason: %s", message_data.get("error"))
             return {
                 "status": "ignored",
-                "reason": message_data.get("error")
-            }
+                "reason": message_data.get("error"),
+    }
 
         pipeline = EmailPipelineService(gmail=gmail)
         processing_result = pipeline.process_incoming_email(
@@ -82,8 +81,5 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("GMAIL PUSH FAILED: %s", exc)
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error"
-        )
+        logger.error("GMAIL PUSH FAILED: %s", exc)
+        return {"status": "error", "detail": str(exc)}
