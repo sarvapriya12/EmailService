@@ -5,6 +5,7 @@ from services.gmail_watch_service import GmailWatchService
 from services.email_pipeline_service import EmailPipelineService
 from fastapi import APIRouter, HTTPException
 import logging
+from services.database import is_already_processed, mark_as_processed
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +63,26 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
             return {
                 "status": "ignored",
                 "reason": message_data.get("error"),
-    }
+            }
+        message_id = message_data.get("message_id")
+
+        if is_already_processed(message_id):
+            logger.info("Skipping duplicate message: %s", message_id)
+
+
+            return {"status": "ignored", "reason": "duplicate"}
 
         pipeline = EmailPipelineService(gmail=gmail)
         processing_result = pipeline.process_incoming_email(
             sender_email=message_data["sender_email"],
             subject=message_data["subject"],
             body=message_data["body"],
+        )
+        mark_as_processed(
+            gmail_message_id=message_id,
+            sender_email=message_data["sender_email"],
+            subject=message_data["subject"],
+            status=processing_result.gmail_status,
         )
 
         return {

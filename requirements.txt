@@ -27,3 +27,4 @@ tiktoken
 
 azure-identity
 azure-core
+pytest
