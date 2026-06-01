@@ -223,6 +223,39 @@ These are loaded through `services/prompt_loader.py`, which uses `string.Templat
 - The repo also contains Render deployment configuration.
 - CI runs the test suite, sanity checks the app, and builds the Docker image.
 
+## Environment Variables
+
+The project uses a local `.env` file for runtime configuration. Secrets should stay in `.env` and must not be committed to GitHub.
+
+### LLM Provider Settings
+
+- `OPENROUTER_API_KEY`: OpenRouter API key.
+- `GROQ_API_KEY`: Groq API key.
+- `GOOGLE_API_KEY`: Google Gemini API key.
+- `OPENROUTER_MODEL`: OpenRouter model name.
+- `GROQ_MODEL`: Groq model name.
+- `GEMINI_MODEL`: Gemini model name.
+
+### Gmail Settings
+
+- `GMAIL_CLIENT_ID`: Gmail OAuth client ID.
+- `GMAIL_CLIENT_SECRET`: Gmail OAuth client secret.
+- `GMAIL_REFRESH_TOKEN`: Gmail OAuth refresh token.
+- `GMAIL_SENDER_EMAIL`: Gmail address used to send replies.
+- `GMAIL_WATCH_TOPIC_NAME`: Pub/Sub topic name used for Gmail watch notifications.
+
+### App Runtime Settings
+
+- `HOST`: host address the app binds to in local or container runtime.
+- `PORT`: application port.
+- `DEBUG`: enables or disables debug behavior in local development.
+
+### Notes
+
+- The app reads settings through `config/settings.py`.
+- The `.env` file should only be used for local development or private deployment secrets.
+- In production, these values should be injected by the hosting platform or a secret manager.
+
 ## Summary
 
 This is now a modular AI email support service with:
