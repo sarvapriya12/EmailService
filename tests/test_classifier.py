@@ -1,0 +1,42 @@
+from services.classifier import EmailClassifier
+
+
+class StubRouter:
+    def __init__(self, response: str) -> None:
+        self.response = response
+        self.prompts: list[str] = []
+
+    def invoke(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+        return self.response
+
+
+def test_classify_returns_expected_category_and_prompt() -> None:
+    router = StubRouter("billing - the customer asks about an invoice")
+    classifier = EmailClassifier(router=router)
+
+    result = classifier.classify(
+        subject="Invoice question",
+        body="Please explain the charge on my latest bill.",
+    )
+
+    assert result["category"] == "billing"
+    assert result["reason"] == "billing - the customer asks about an invoice"
+    assert result["raw_response"] == "billing - the customer asks about an invoice"
+    assert len(router.prompts) == 1
+    assert "Subject: Invoice question" in router.prompts[0]
+    assert "Body: Please explain the charge on my latest bill." in router.prompts[0]
+
+
+def test_classify_defaults_to_general_inquiry_when_category_is_missing() -> None:
+    router = StubRouter("This is a follow-up about my account.")
+    classifier = EmailClassifier(router=router)
+
+    result = classifier.classify(
+        subject="Account follow-up",
+        body="I need help with my account status.",
+    )
+
+    assert result["category"] == "general_inquiry"
+    assert result["reason"] == "This is a follow-up about my account."
+    assert result["raw_response"] == "This is a follow-up about my account."

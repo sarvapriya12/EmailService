@@ -24,6 +24,7 @@ Updates made so far:
 - Added `render.yaml` for deploying the FastAPI app to Render with the existing Dockerfile and `/health` endpoint.
 - Shifted the deployment target from AWS App Runner to Render for the next hosting step.
 - Updated the CI workflow to support a Render deploy hook on push.
+- Added a `tests/` package with focused classifier tests for prompt construction and category parsing.
 
 Notes:
 - The current app still uses the existing single-email processing flow.
