@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 
 from services.llm_router import LLMRouter
+from services.prompt_loader import render_prompt
 
 
 logger = logging.getLogger(__name__)
@@ -29,14 +30,13 @@ class EmailGenerator:
 		issue = extracted.get("issue") or "the reported issue"
 		priority = extracted.get("priority") or "medium"
 
-		return (
-			"Write a concise professional support reply. "
-			"Acknowledge the issue, confirm understanding, and keep the tone helpful.\n\n"
-			f"Subject: {subject}\n"
-			f"Body: {body}\n"
-			f"Customer: {customer_name}\n"
-			f"Issue: {issue}\n"
-			f"Priority: {priority}\n"
+		return render_prompt(
+			"email_generator.txt",
+			subject=subject,
+			body=body,
+			customer_name=customer_name,
+			issue=issue,
+			priority=priority,
 		)
 
 

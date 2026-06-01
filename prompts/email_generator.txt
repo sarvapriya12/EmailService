@@ -1,0 +1,8 @@
+Write a concise professional support reply.
+Acknowledge the issue, confirm understanding, and keep the tone helpful.
+
+Subject: $subject
+Body: $body
+Customer: $customer_name
+Issue: $issue
+Priority: $priority

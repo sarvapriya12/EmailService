@@ -3,6 +3,7 @@ import re
 from typing import Optional
 
 from services.llm_router import LLMRouter
+from services.prompt_loader import render_prompt
 
 
 logger = logging.getLogger(__name__)
@@ -36,16 +37,11 @@ class EmailExtractor:
 	def _build_prompt(self, subject: str, body: str) -> str:
 		fields = ", ".join(EXTRACTION_FIELDS)
 
-		return (
-			"You are an information extraction assistant for customer support emails. "
-			"Read the email and extract the requested fields. "
-			"Return one field per line in the form field_name: value.\n\n"
-			f"Required fields: {fields}\n\n"
-			"For reference_number, use any ID found in the email such as order ID, "
-			"patient ID, ticket number, case number, or any other reference identifier.\n\n"
-			f"Subject: {subject}\n"
-			f"Body: {body}\n\n"
-			"Use 'medium' for priority unless the email clearly indicates low or high urgency."
+		return render_prompt(
+			"email_extractor.txt",
+			fields=fields,
+			subject=subject,
+			body=body,
 		)
 
 	def _parse_response(self, response: str) -> dict[str, object]:

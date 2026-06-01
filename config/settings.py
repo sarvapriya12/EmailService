@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     GMAIL_CLIENT_SECRET: Optional[str] = None
     GMAIL_REFRESH_TOKEN: Optional[str] = None
     GMAIL_SENDER_EMAIL: Optional[str] = None
+    GMAIL_WATCH_TOPIC_NAME: Optional[str] = None
 
 
 settings = Settings()

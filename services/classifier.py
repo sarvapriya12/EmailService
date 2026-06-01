@@ -3,6 +3,7 @@ import re
 from typing import Optional
 
 from services.llm_router import LLMRouter
+from services.prompt_loader import render_prompt
 
 
 logger = logging.getLogger(__name__)
@@ -40,14 +41,11 @@ class EmailClassifier:
 	def _build_prompt(self, subject: str, body: str) -> str:
 		categories = ", ".join(EMAIL_CATEGORIES)
 
-		return (
-			"You are an email support classifier. "
-			"Read the customer email and choose exactly one category from the list below. "
-			"Return the category name first, followed by a short reason.\n\n"
-			f"Allowed categories: {categories}\n\n"
-			f"Subject: {subject}\n"
-			f"Body: {body}\n\n"
-			"Return format: category - reason"
+		return render_prompt(
+			"email_classifier.txt",
+			categories=categories,
+			subject=subject,
+			body=body,
 		)
 
 	def _parse_category(self, response: str) -> str:

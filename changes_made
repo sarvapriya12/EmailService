@@ -27,6 +27,14 @@ Updates made so far:
 - Added a `tests/` package with focused classifier tests for prompt construction and category parsing.
 - Added `tests/__init__.py` so the tests directory is tracked as a Python package.
 - Fixed the CI workflow test job so it installs `pytest` and runs tests with the GitHub Actions Python runtime.
+- Moved hardcoded prompt text into files under `prompts/` and added a shared prompt loader.
+- Added a `/gmail/watch` endpoint and Gmail watch support in `GmailService` for Gmail Pub/Sub setup.
+- Added `GMAIL_WATCH_TOPIC_NAME` to settings for the Gmail watch flow.
+- Added a `/gmail/push` endpoint plus a Gmail watch notification parser for Pub/Sub webhook handling.
+- Added Pub/Sub request schemas and tests for Gmail watch notification decoding.
+- Connected the Gmail push flow to Gmail history lookup and the shared email pipeline.
+- Added tests for Gmail message parsing and the reusable email pipeline service.
+- Aligned the Gmail history test stub with the optional `pageToken` argument used by the service.
 
 Notes:
 - The current app still uses the existing single-email processing flow.
