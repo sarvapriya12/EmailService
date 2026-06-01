@@ -3,8 +3,8 @@ Changes Made
 Date: 2026-06-01
 
 Current status:
-- No code has been pushed to GitHub yet.
-- All changes listed below are local workspace changes only.
+- Code has already been pushed to GitHub.
+- The changes below track both the existing pushed work and the new Render deployment update.
 
 Updates made so far:
 - Added a production-friendly FastAPI app factory in `main.py`.
@@ -20,6 +20,8 @@ Updates made so far:
 - Added `AWS_DEPLOYMENT.md` with the one-time AWS setup and required GitHub variables/secrets.
 - Added `email-validator` to `requirements.txt` and normalized the file ending.
 - Normalized `requirements.txt` to remove duplicate dependency blocks and keep a single clean list.
+- Added `render.yaml` for deploying the FastAPI app to Render with the existing Dockerfile and `/health` endpoint.
+- Shifted the deployment target from AWS App Runner to Render for the next hosting step.
 
 Notes:
 - The current app still uses the existing single-email processing flow.
