@@ -80,33 +80,6 @@ class GmailService:
             "body": GmailService.extract_message_text(payload).strip(),
         }
 
-    def _collect_message_ids_since(self, history_id: str) -> list[str]:
-        message_ids: list[str] = []
-        page_token: str | None = None
-
-        while True:
-            response = self.service.users().history().list(
-                userId="me",
-                startHistoryId=history_id,
-                historyTypes=["messageAdded"],
-                pageToken=page_token,
-            ).execute()
-
-            for history_item in response.get("history", []) or []:
-                for message_added in history_item.get("messagesAdded", []) or []:
-                    message = message_added.get("message", {}) or {}
-                    message_id = str(message.get("id", "")).strip()
-
-                    if message_id:
-                        message_ids.append(message_id)
-
-            page_token = response.get("nextPageToken")
-
-            if not page_token:
-                break
-
-        return message_ids
-
     def send_reply(self, to_email: str, subject: str, body: str) -> dict[str, str]:
         logger.info("Preparing Gmail send for %s", to_email)
         try:
@@ -161,16 +134,19 @@ class GmailService:
 
     def fetch_latest_message_since(self, history_id: str) -> dict[str, object]:
         try:
-            message_ids = self._collect_message_ids_since(history_id)
-
-            if not message_ids:
-                logger.info("No new messages for history_id=%s — skipping", history_id)
+            # Fetch the absolute latest message in the INBOX (ignores history_id completely)
+            response = self.service.users().messages().list(
+                userId="me", labelIds=["INBOX"], maxResults=1
+            ).execute()
+            
+            messages = response.get("messages", [])
+            if not messages:
                 return {
                     "status": "no_new_messages",
-                    "error": "No new Gmail messages were found for the supplied history ID",
+                    "error": "No messages found in INBOX",
                 }
 
-            latest_message_id = message_ids[-1]
+            latest_message_id = messages[0]["id"]
             message = self.service.users().messages().get(
                 userId="me",
                 id=latest_message_id,
