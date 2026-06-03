@@ -9,10 +9,15 @@ logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer()
 
+# Dedicated anon client for auth operations (get_user requires anon key, not service role key)
+_anon_supabase: Optional[Client] = None
+
+
 def _get_anon_supabase() -> Client:
-    """Create a fresh client to prevent httpx 'Broken pipe' on idle connections."""
-    key = settings.SUPABASE_ANON_KEY or settings.SUPABASE_SERVICE_ROLE_KEY
-    return create_client(settings.SUPABASE_URL, key)
+    global _anon_supabase
+    if _anon_supabase is None:
+        _anon_supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
+    return _anon_supabase
 
 
 def get_current_user(
