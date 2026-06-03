@@ -92,10 +92,15 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
             "message": message_data,
             "processing": processing_result.model_dump(),
         }
+    
     except ValueError as exc:
+        logger.error("Push failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=400, detail=str(exc))
     except HTTPException:
+        logger.error("Push failed: %s", exc, exc_info=True)
+        
         raise
     except Exception as exc:
-        logger.error("GMAIL PUSH FAILED: %s", exc)
+        
+        logger.error("GMAIL PUSH FAILED: %s", exc, exc_info=True)
         return {"status": "error", "detail": str(exc)}

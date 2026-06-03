@@ -33,6 +33,31 @@ class Settings(BaseSettings):
     GENERATE_MODEL_2: str = "qwen/qwen3-32b"
     GENERATE_MODEL_3: str = "poolside/laguna-xs.2:free"
 
+    @property
+    def CLASSIFY_MODELS(self) -> list[str]:
+        return [
+            f"groq:{self.CLASSIFY_MODEL_1}",
+            f"openrouter:{self.CLASSIFY_MODEL_2}",
+            f"gemini:{self.CLASSIFY_MODEL_3}",
+        ]
+
+    @property
+    def EXTRACT_MODELS(self) -> list[str]:
+        return [
+            f"openrouter:{self.EXTRACT_MODEL_1}",
+            f"groq:{self.EXTRACT_MODEL_2}",
+            f"gemini:{self.EXTRACT_MODEL_3}",
+        ]
+
+    @property
+    def GENERATE_MODELS(self) -> list[str]:
+        return [
+            f"openrouter:{self.GENERATE_MODEL_1}",
+            f"groq:{self.GENERATE_MODEL_2}",
+            f"openrouter:{self.GENERATE_MODEL_3}",
+        ]
+
+
 
 
 settings = Settings()
