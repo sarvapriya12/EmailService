@@ -3,7 +3,7 @@ from typing import Optional
 
 from services.llm_router import LLMRouter
 from services.prompt_loader import render_prompt
-
+from services.llm_router import PoolRouter, build_generate_pool
 
 logger = logging.getLogger(__name__)
 
@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 class EmailGenerator:
 	"""Generates support replies from extracted email context."""
 
-	def __init__(self, router: Optional[LLMRouter] = None) -> None:
-		self.router = router or LLMRouter()
+	def __init__(self, router: Optional[PoolRouter] = None) -> None:
+		self.router = router or build_generate_pool()
 
 	def generate(self, subject: str, body: str, extracted: dict[str, object]) -> dict[str, str]:
 		prompt = self._build_prompt(subject, body, extracted)

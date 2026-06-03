@@ -4,7 +4,7 @@ from typing import Optional
 
 from services.llm_router import LLMRouter
 from services.prompt_loader import render_prompt
-
+from services.llm_router import PoolRouter, build_classify_pool
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +19,13 @@ EMAIL_CATEGORIES = (
 )
 
 
+from services.llm_router import PoolRouter, build_classify_pool
+
 class EmailClassifier:
 	"""Classifies customer emails into support categories."""
 
-	def __init__(self, router: Optional[LLMRouter] = None) -> None:
-		self.router = router or LLMRouter()
+	def __init__(self, router: Optional[PoolRouter] = None) -> None:
+		self.router = router or build_classify_pool()
 
 	def classify(self, subject: str, body: str) -> dict[str, object]:
 		prompt = self._build_prompt(subject=subject, body=body)

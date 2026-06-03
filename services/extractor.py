@@ -4,7 +4,7 @@ from typing import Optional
 
 from services.llm_router import LLMRouter
 from services.prompt_loader import render_prompt
-
+from services.llm_router import PoolRouter, build_extract_pool
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,8 @@ EXTRACTION_FIELDS = (
 class EmailExtractor:
 	"""Extracts structured support details from email text."""
 
-	def __init__(self, router: Optional[LLMRouter] = None) -> None:
-		self.router = router or LLMRouter()
+	def __init__(self, router: Optional[PoolRouter] = None) -> None:
+		self.router = router or build_extract_pool()
 
 	def extract(self, subject: str, body: str) -> dict[str, object]:
 		prompt = self._build_prompt(subject=subject, body=body)
