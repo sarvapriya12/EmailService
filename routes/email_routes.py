@@ -6,6 +6,8 @@ from services.email_pipeline_service import EmailPipelineService
 from fastapi import APIRouter, HTTPException
 import logging
 from services.database import is_already_processed, mark_as_processed
+from services.auth_guard import get_current_user
+from fastapi import Depends
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +15,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/process-email")
-def process_email(email_request: EmailRequest) -> EmailResponse:
+def process_email(email_request: EmailRequest,current_user: dict = Depends(get_current_user),) -> EmailResponse:
     
     try:
         pipeline = EmailPipelineService()
@@ -32,7 +34,7 @@ def process_email(email_request: EmailRequest) -> EmailResponse:
 
 
 @router.post("/gmail/watch")
-def watch_gmail() -> dict[str, object]:
+def watch_gmail(current_user: dict = Depends(get_current_user)) -> dict[str, object]:
     try:
         gmail = GmailService()
         result = gmail.watch_inbox()

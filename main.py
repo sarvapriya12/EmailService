@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-
+from routes.auth_routes import router as auth_router
 from routes.email_routes import router
 
 
@@ -15,6 +15,7 @@ def create_app() -> FastAPI:
 		return {"status": "ok"}
 
 	app.include_router(router)
+	app.include_router(auth_router)
 	return app
 
 
