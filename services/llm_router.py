@@ -116,7 +116,7 @@ class PoolRouter:
                     self._mark_unavailable(current)
                 continue
 
-        raise RuntimeError("All models in pool failed.")
+        return "system_overloaded_fallback"
 
 
 def build_classify_pool() -> PoolRouter:

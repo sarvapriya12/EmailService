@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     GMAIL_SENDER_EMAIL: Optional[str] = None
     GMAIL_WATCH_TOPIC_NAME: Optional[str] = None
     SUPABASE_URL: Optional[str] = None
+    SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
     # Classification pool
     CLASSIFY_MODEL_1: str = "llama-3.3-70b-versatile"
@@ -31,7 +32,7 @@ class Settings(BaseSettings):
     GENERATE_MODEL_1: str = "meta-llama/llama-3.3-70b-instruct:free"
     GENERATE_MODEL_2: str = "qwen/qwen3-32b"
     GENERATE_MODEL_3: str = "poolside/laguna-xs.2:free"
-        
+
 
 
 settings = Settings()

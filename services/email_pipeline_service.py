@@ -16,10 +16,10 @@ class EmailPipelineService:
 		router: Optional[LLMRouter] = None,
 		gmail: Optional[GmailService] = None,
 	) -> None:
-		self.router = router or LLMRouter()
-		self.classifier = EmailClassifier(router=self.router)
-		self.extractor = EmailExtractor(router=self.router)
-		self.generator = EmailGenerator(router=self.router)
+		self.router = router
+		self.classifier = EmailClassifier(router=router)
+		self.extractor = EmailExtractor(router=router)
+		self.generator = EmailGenerator(router=router)
 		self.gmail = gmail or GmailService()
 
 	def process(self, sender_email: str, subject: str, body: str) -> EmailResponse:
