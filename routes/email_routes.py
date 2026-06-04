@@ -75,13 +75,14 @@ def subscription_status(
 @router.post("/gmail/push")
 def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
     try:
-        logger.info("GMAIL PUSH RECEIVED")
+        logger.info("PUSH STARTED — notification received")  # TEMP
         listener = GmailWatchService()
         notification_data = listener.parse_notification(notification)
-        logger.info("NOTIFICATION DATA: %s", notification_data)
+        logger.info("NOTIFICATION PARSED: %s", notification_data)  # TEMP
+
         gmail = GmailService()
         message_data = gmail.fetch_latest_message_since(notification_data["history_id"])
-        logger.info("MESSAGE DATA: %s", message_data)
+        logger.info("MESSAGE FETCHED: %s", message_data.get("status"))  # TEMP
 
         if message_data.get("status") in ("failed", "no_new_messages"):
             logger.info("Skipping push — reason: %s", message_data.get("error"))
@@ -89,20 +90,23 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
                 "status": "ignored",
                 "reason": message_data.get("error"),
             }
+
         message_id = message_data.get("message_id")
+        logger.info("IDEMPOTENCY CHECK STARTED for message: %s", message_id)  # TEMP
 
         if is_already_processed(message_id):
             logger.info("Skipping duplicate message: %s", message_id)
-
-
             return {"status": "ignored", "reason": "duplicate"}
 
+        logger.info("PIPELINE STARTED")  # TEMP
         pipeline = EmailPipelineService(gmail=gmail)
         processing_result = pipeline.process_incoming_email(
             sender_email=message_data["sender_email"],
             subject=message_data["subject"],
             body=message_data["body"],
         )
+        logger.info("PIPELINE COMPLETE — status: %s", processing_result.gmail_status)  # TEMP
+
         mark_as_processed(
             gmail_message_id=message_id,
             sender_email=message_data["sender_email"],
@@ -115,13 +119,14 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
             "message": message_data,
             "processing": processing_result.model_dump(),
         }
-    
+
     except ValueError as exc:
         logger.error("Push failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=400, detail=str(exc))
-        
+
     except HTTPException:
         raise
+
     except Exception as exc:
         logger.error("GMAIL PUSH FAILED: %s", exc, exc_info=True)
         return {"status": "error", "detail": str(exc)}
