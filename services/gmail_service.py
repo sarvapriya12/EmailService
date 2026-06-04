@@ -85,7 +85,10 @@ class GmailService:
         page_token: str | None = None
 
         # Subtract 1 from history_id to catch messages at exact boundary
-        start_id = str(max(1, int(history_id) - 1))
+        try:
+            start_id = str(max(1, int(history_id) - 1))
+        except ValueError:
+            start_id = history_id
 
         while True:
             response = self.service.users().history().list(
