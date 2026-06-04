@@ -8,6 +8,7 @@ import logging
 from services.database import is_already_processed, mark_as_processed
 from services.auth_guard import get_current_user
 from fastapi import Depends
+from services.subscription_service import check_quota, increment_usage
 
 logger = logging.getLogger(__name__)
 
@@ -15,20 +16,33 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/process-email")
-def process_email(email_request: EmailRequest,current_user: dict = Depends(get_current_user),) -> EmailResponse:
-    
+def process_email(
+    email_request: EmailRequest,
+    current_user: dict = Depends(get_current_user),
+) -> EmailResponse:
     try:
+        user_id = current_user["user_id"]
+
+        if not check_quota(user_id):
+            raise HTTPException(
+                status_code=429,
+                detail="Email quota exceeded. Please upgrade your plan."
+            )
+
         pipeline = EmailPipelineService()
-        return pipeline.process_incoming_email(
+        result = pipeline.process_incoming_email(
             sender_email=email_request.sender_email,
             subject=email_request.subject,
             body=email_request.body,
         )
 
+        increment_usage(user_id)
+        return result
 
+    except HTTPException:
+        raise
     except RuntimeError:
         raise HTTPException(status_code=503, detail="All LLM providers failed")
-
     except Exception:
         raise HTTPException(status_code=500, detail="Internal server error")
 
@@ -48,6 +62,14 @@ def watch_gmail(current_user: dict = Depends(get_current_user)) -> dict[str, obj
     except Exception:
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
+@router.get("/subscription/status")
+def subscription_status(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    from services.subscription_service import get_subscription_info
+    user_id = current_user["user_id"]
+    return get_subscription_info(user_id)
 
 @router.post("/gmail/push")
 def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
@@ -97,8 +119,6 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
         logger.error("Push failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=400, detail=str(exc))
     except HTTPException:
-        logger.error("Push failed: %s", exc, exc_info=True)
-        
         raise
     except Exception as exc:
         
