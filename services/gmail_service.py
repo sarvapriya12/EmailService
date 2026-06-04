@@ -84,10 +84,13 @@ class GmailService:
         message_ids: list[str] = []
         page_token: str | None = None
 
+        # Subtract 1 from history_id to catch messages at exact boundary
+        start_id = str(max(1, int(history_id) - 1))
+
         while True:
             response = self.service.users().history().list(
                 userId="me",
-                startHistoryId=history_id,
+                startHistoryId=start_id,
                 historyTypes=["messageAdded"],
                 pageToken=page_token,
             ).execute()
