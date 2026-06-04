@@ -92,11 +92,13 @@ class GmailService:
 
         while True:
             response = self.service.users().history().list(
-                userId="me",
-                startHistoryId=start_id,
-                historyTypes=["messageAdded"],
-                pageToken=page_token,
-            ).execute()
+            userId="me",
+            startHistoryId=start_id,
+            historyTypes=["messageAdded"],
+            pageToken=page_token,
+            )  .execute()
+
+            logger.warning("RAW HISTORY RESPONSE: %s", response)  # TEMP
 
             for history_item in response.get("history", []) or []:
                 for message_added in history_item.get("messagesAdded", []) or []:
