@@ -1,13 +1,19 @@
+import logging
 from supabase import create_client
 from config.settings import settings
 
+logger = logging.getLogger(__name__)
 supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
 
 def is_already_processed(gmail_message_id: str) -> bool:
-    response = supabase.table("processed_messages").select("id").eq(
-        "gmail_message_id", gmail_message_id
-    ).execute()
-    return len(response.data) > 0
+    try:
+        response = supabase.table("processed_messages").select("id").eq(
+            "gmail_message_id", gmail_message_id
+        ).execute()
+        return len(response.data) > 0
+    except Exception as exc:
+        logger.error("is_already_processed failed: %s", exc, exc_info=True)
+        return False
 
 def mark_as_processed(
     gmail_message_id: str,
@@ -15,9 +21,12 @@ def mark_as_processed(
     subject: str,
     status: str,
 ) -> None:
-    supabase.table("processed_messages").insert({
-        "gmail_message_id": gmail_message_id,
-        "sender_email": sender_email,
-        "subject": subject,
-        "status": status,
-    }).execute()
+    try:
+        supabase.table("processed_messages").insert({
+            "gmail_message_id": gmail_message_id,
+            "sender_email": sender_email,
+            "subject": subject,
+            "status": status,
+        }).execute()
+    except Exception as exc:
+        logger.error("mark_as_processed failed: %s", exc, exc_info=True)
