@@ -43,9 +43,9 @@ def process_email(
         raise
     except RuntimeError:
         raise HTTPException(status_code=503, detail="All LLM providers failed")
-    except Exception:
+    except Exception as exc:
+        logger.error("process-email failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
-
 
 @router.post("/gmail/watch")
 def watch_gmail(current_user: dict = Depends(get_current_user)) -> dict[str, object]:
@@ -59,7 +59,8 @@ def watch_gmail(current_user: dict = Depends(get_current_user)) -> dict[str, obj
         return result
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
+        logger.error("watch-gmail failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
