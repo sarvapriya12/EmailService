@@ -5,12 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from schemas.email import EmailRequest, EmailResponse
 from schemas.pubsub import PubSubPushRequest
 from services.auth_guard import get_current_user
-from services.database import is_already_processed, mark_as_processed
 from services.email_pipeline_service import EmailPipelineService
 from services.gmail_service import GmailService
 from services.gmail_watch_service import GmailWatchService
 from services.subscription_service import check_quota, increment_usage
 from config.settings import settings
+from services.database import is_already_processed, mark_as_processed, get_last_history_id, update_last_history_id
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,12 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
         logger.info("Gmail push received for history_id=%s", notification_data["history_id"])
 
         gmail = GmailService()
-        message_data = gmail.fetch_latest_message_since(notification_data["history_id"])
+        # Use stored history ID instead of notification history ID
+        last_history_id = get_last_history_id()
+        message_data = gmail.fetch_latest_message_since(last_history_id)
+
+        # Update stored history ID regardless of result
+        update_last_history_id(notification_data["history_id"])
 
         if message_data.get("status") in ("failed", "no_new_messages"):
             logger.info("Skipping push — reason: %s", message_data.get("error"))
