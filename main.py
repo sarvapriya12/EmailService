@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from routes.auth_routes import router as auth_router
 from routes.email_routes import router
-
+import logging
+logging.basicConfig(level=logging.INFO)
 
 def create_app() -> FastAPI:
 	app = FastAPI(title="AI Email Support System", version="0.1.0")

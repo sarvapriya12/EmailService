@@ -74,16 +74,16 @@ def subscription_status(
 
 @router.post("/gmail/push")
 def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
+    print("GMAIL PUSH HIT", flush=True)  # TEMP
     try:
-        logger.info("PUSH STARTED — notification received")  # TEMP
+        logger.warning("PUSH STARTED — notification received")  # TEMP
         listener = GmailWatchService()
         notification_data = listener.parse_notification(notification)
-        logger.info("NOTIFICATION PARSED: %s", notification_data)  # TEMP
+        logger.warning("NOTIFICATION PARSED: %s", notification_data)  # TEMP
 
         gmail = GmailService()
         message_data = gmail.fetch_latest_message_since(notification_data["history_id"])
-        logger.info("MESSAGE FETCHED: %s", message_data.get("status"))  # TEMP
-
+        logger.warning("MESSAGE FETCHED: %s", message_data.get("status"))  # TEMP
         if message_data.get("status") in ("failed", "no_new_messages"):
             logger.info("Skipping push — reason: %s", message_data.get("error"))
             return {
