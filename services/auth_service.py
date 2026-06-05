@@ -1,13 +1,13 @@
 import logging
-from typing import Optional
-from supabase import Client
-from services.database import supabase
+
+from services.database import _get_client
 
 logger = logging.getLogger(__name__)
 
 
 def sign_up(email: str, password: str) -> dict:
     try:
+        supabase = _get_client()
         response = supabase.auth.sign_up({"email": email, "password": password})
         return {"status": "success", "user": response.user.email if response.user else None}
     except Exception as exc:
@@ -17,6 +17,7 @@ def sign_up(email: str, password: str) -> dict:
 
 def sign_in(email: str, password: str) -> dict:
     try:
+        supabase = _get_client()
         response = supabase.auth.sign_in_with_password({"email": email, "password": password})
         return {
             "status": "success",
