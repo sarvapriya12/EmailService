@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     def CLASSIFY_MODELS(self) -> list[str]:
         return [
             "groq:llama-3.3-70b-versatile",
-            "openrouter:google/gemma-3-27b-it:free",
+            "openrouter:mistralai/mistral-7b-instruct:free",
             "gemini:gemini-2.0-flash-lite",
         ]
 

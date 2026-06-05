@@ -31,7 +31,7 @@ def process_email(
                 detail="Email quota exceeded. Please upgrade your plan."
             )
 
-        pipeline = EmailPipelineService()
+        pipeline = EmailPipelineService(user_id=current_user["user_id"])
         result = pipeline.process_incoming_email(
             sender_email=email_request.sender_email,
             subject=email_request.subject,
@@ -105,12 +105,18 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
             logger.info("Skipping duplicate message: %s", message_id)
             return {"status": "ignored", "reason": "duplicate"}
 
-        pipeline = EmailPipelineService(gmail=gmail)
+        pipeline = EmailPipelineService(gmail=gmail, user_id="system")
         processing_result = pipeline.process_incoming_email(
             sender_email=message_data["sender_email"],
             subject=message_data["subject"],
             body=message_data["body"],
+            gmail_message_id=message_data.get("message_id"),
+            
         )
+        # Future (per-user)
+            # pipeline = EmailPipelineService(gmail=gmail, user_id=user_id_from_gmail_token_lookup)
+        
+
 
         mark_as_processed(
             gmail_message_id=message_id,

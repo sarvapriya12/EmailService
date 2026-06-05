@@ -1,19 +1,24 @@
 import logging
-from supabase import create_client
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
-supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+
+
+def _get_client():
+    from supabase import create_client
+    return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+
 
 def is_already_processed(gmail_message_id: str) -> bool:
     try:
-        response = supabase.table("processed_messages").select("id").eq(
+        response = _get_client().table("processed_messages").select("id").eq(
             "gmail_message_id", gmail_message_id
         ).execute()
         return len(response.data) > 0
     except Exception as exc:
         logger.error("is_already_processed failed: %s", exc, exc_info=True)
         return False
+
 
 def mark_as_processed(
     gmail_message_id: str,
@@ -22,7 +27,7 @@ def mark_as_processed(
     status: str,
 ) -> None:
     try:
-        supabase.table("processed_messages").insert({
+        _get_client().table("processed_messages").insert({
             "gmail_message_id": gmail_message_id,
             "sender_email": sender_email,
             "subject": subject,
@@ -34,7 +39,9 @@ def mark_as_processed(
 
 def get_last_history_id() -> str:
     try:
-        response = supabase.table("gmail_watch_state").select("last_history_id").eq("id", 1).execute()
+        response = _get_client().table("gmail_watch_state").select("last_history_id").eq(
+            "id", 1
+        ).execute()
         if response.data:
             return response.data[0]["last_history_id"]
         return "0"
@@ -42,9 +49,10 @@ def get_last_history_id() -> str:
         logger.error("get_last_history_id failed: %s", exc)
         return "0"
 
+
 def update_last_history_id(history_id: str) -> None:
     try:
-        supabase.table("gmail_watch_state").update({
+        _get_client().table("gmail_watch_state").update({
             "last_history_id": history_id,
             "updated_at": "now()"
         }).eq("id", 1).execute()
