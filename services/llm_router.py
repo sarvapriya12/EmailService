@@ -24,7 +24,7 @@ def _build_client(provider_model: str) -> Optional[tuple[str, Any]]:
     if provider == "groq":
         if not settings.GROQ_API_KEY:
             return None
-        return (provider_model, ChatGroq(model=model, api_key=settings.GROQ_API_KEY))
+        return (provider_model, ChatGroq(model=model, api_key=settings.GROQ_API_KEY, max_retries=0))
 
     if provider == "openrouter":
         if not settings.OPENROUTER_API_KEY:
@@ -33,6 +33,7 @@ def _build_client(provider_model: str) -> Optional[tuple[str, Any]]:
             model=model,
             api_key=settings.OPENROUTER_API_KEY,
             base_url="https://openrouter.ai/api/v1",
+            max_retries=0,
         ))
 
     if provider == "gemini":
@@ -41,6 +42,7 @@ def _build_client(provider_model: str) -> Optional[tuple[str, Any]]:
         return (provider_model, ChatGoogleGenerativeAI(
             model=model,
             google_api_key=settings.GOOGLE_API_KEY,
+            max_retries=0,
         ))
     
     if provider == "nvidia":
@@ -49,6 +51,7 @@ def _build_client(provider_model: str) -> Optional[tuple[str, Any]]:
         return (provider_model, ChatNVIDIA(
             model=model,
             api_key=settings.NVIDIA_API_KEY,
+            max_retries=0,
         ))
     
 

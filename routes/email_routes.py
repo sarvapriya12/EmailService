@@ -1,4 +1,5 @@
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -16,6 +17,22 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# --- In-Memory Debounce Caches ---
+RECENT_HISTORY_IDS: dict[str, float] = {}
+RECENT_MESSAGE_IDS: dict[str, float] = {}
+
+def _is_recently_seen(id_str: str, cache: dict[str, float], ttl: int = 60) -> bool:
+    now = time.time()
+    if id_str in cache and (now - cache[id_str] < ttl):
+        return True
+    cache[id_str] = now
+    if len(cache) > 1000:
+        keys_to_del = [k for k, v in cache.items() if now - v > ttl]
+        for k in keys_to_del:
+            del cache[k]
+        if len(cache) > 1000:
+            cache.clear()
+    return False
 
 @router.post("/process-email")
 def process_email(
@@ -78,14 +95,31 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
         listener = GmailWatchService()
         notification_data = listener.parse_notification(notification)
         logger.info("Gmail push received for history_id=%s", notification_data["history_id"])
+        incoming_history_id = notification_data["history_id"]
+        logger.info("Gmail push received for history_id=%s", incoming_history_id)
+
+        # 0. In-Memory Debounce (Prevents Race Conditions)
+        if _is_recently_seen(str(incoming_history_id), RECENT_HISTORY_IDS, ttl=60):
+            logger.info("Debounced duplicate push in memory: history_id=%s", incoming_history_id)
+            return {"status": "ignored", "reason": "debounced_in_memory"}
+
+        last_history_id = get_last_history_id()
+
+        # 1. Strict History ID Tracking (Webhook Debounce)
+        try:
+            if int(incoming_history_id) <= int(last_history_id):
+                logger.info("Ignoring duplicate/old push. Incoming: %s, Stored: %s", incoming_history_id, last_history_id)
+                return {"status": "ignored", "reason": "old_notification"}
+        except ValueError:
+            pass  # Fallback if history_id is somehow not numeric
 
         gmail = GmailService()
         # Use stored history ID instead of notification history ID
         last_history_id = get_last_history_id()
         message_data = gmail.fetch_latest_message_since(last_history_id)
 
-        # Update stored history ID regardless of result
-        update_last_history_id(notification_data["history_id"])
+        # Update stored history ID to move the cursor forward
+        update_last_history_id(incoming_history_id)
 
         if message_data.get("status") in ("failed", "no_new_messages"):
             logger.info("Skipping push — reason: %s", message_data.get("error"))
@@ -107,6 +141,11 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
             return {"status": "ignored", "reason": "automated_email"}
 
         message_id = message_data.get("message_id")
+
+        # 2. In-Memory Message ID Debounce (Saves Supabase DB Calls)
+        if message_id and _is_recently_seen(str(message_id), RECENT_MESSAGE_IDS, ttl=300):
+            logger.info("Debounced duplicate message in memory: message_id=%s", message_id)
+            return {"status": "ignored", "reason": "duplicate_message_in_memory"}
 
         if not lock_message_for_processing(message_id, message_data["sender_email"], message_data["subject"]):
             logger.info("Skipping duplicate message: %s", message_id)
