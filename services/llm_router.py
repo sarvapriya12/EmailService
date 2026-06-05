@@ -6,6 +6,11 @@ from typing import Any, Optional
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
+from langchain.chat_models import init_chat_model # for siliconflow and deepseek and moonshot
+
+
+
 
 from config.settings import settings
 
@@ -37,6 +42,21 @@ def _build_client(provider_model: str) -> Optional[tuple[str, Any]]:
             model=model,
             google_api_key=settings.GOOGLE_API_KEY,
         ))
+    
+    if provider == "nvidia":
+        if not settings.NVIDIA_API_KEY:
+            return None
+        return (provider_model, ChatNVIDIA(
+            model=model,
+            api_key=settings.NVIDIA_API_KEY,
+        ))
+    
+    if provider in ("siliconflow", "deepseek", "moonshot"):
+        api_key = getattr(settings, f"{provider.upper()}_API_KEY", None)
+        if not api_key:
+            return None
+        client = init_chat_model(provider=provider, model=model, api_key=api_key)
+        return (provider_model, client)
 
     logger.warning("Unknown provider: %s", provider)
     return None
