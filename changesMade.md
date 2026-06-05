@@ -23,3 +23,21 @@ With just these few lines, problems **#2, #3, #4, and #5** from the project road
 
 ### 5. Email Thread Pruning and Input Truncation
 To protect the LLM context limits and database storage from massive email threads, `email-reply-parser` was added to the `EmailPipelineService`. It intelligently strips out old forwarded history, nested replies, and giant signatures. A generous 15,000-character fallback truncation was also added to ensure that no single message can crash the system or cause database bloat.
+
+### 6. Webhook Burst Handling & Race Condition Prevention
+To handle massive bursts of duplicate Gmail push notifications, thread-safe in-memory caches (`RECENT_HISTORY_IDS` and `RECENT_MESSAGE_IDS`) with a TTL were added to `routes/email_routes.py`. These caches intercept and silently drop duplicate webhooks in under 1ms *before* any logging, Supabase DB operations, or Gmail API calls occur. This eliminates race conditions, 409 Conflict database spam, and noisy server logs.
+
+### 7. LLM Pipeline Stall Prevention (Removed SDK Retries)
+To prevent LangChain from stalling the pipeline on API rate limits (e.g., pausing for 45 seconds when hitting Gemini's daily quota limit), `max_retries=0` was explicitly set for all LLM clients (`ChatGroq`, `ChatOpenAI`, `ChatGoogleGenerativeAI`, `ChatNVIDIA`) in `services/llm_router.py`. This ensures that rate limits instantly throw an exception, allowing the custom `PoolRouter` to trigger its seamless round-robin fallback with zero delay.
+
+### 8. Database Connection Singleton (Double-Checked Locking)
+To fix a major database connection bottleneck, a thread-safe Singleton was implemented in `services/database.py` using the Double-Checked Locking pattern. Instead of opening a new Supabase connection pool for every concurrent FastAPI thread during a webhook burst, the atomic thread lock (`_db_lock`) guarantees the client is only instantiated once. This completely protects the server's memory and ports from exhaustion during traffic spikes.
+
+### 9. Fully Atomic Router State
+In `services/llm_router.py`, the model selection logic (`_next_available()`) was moved completely inside the existing thread lock block. This prevents edge-case race conditions where a model's availability bitfield might reset exactly while another thread is reading it, ensuring perfectly thread-safe round-robin routing under high concurrency.
+
+### 10. Global Message Dedup Pipeline (Distributed Idempotency)
+To completely eliminate duplicate processing across multiple server instances, the deduplication system was upgraded to an industry-standard Global Idempotency Lock.
+* **Global Keys:** Replaced `gmail_message_id` checks with a global `idempotency_key` (combining `user_id:message_id`).
+* **Atomic Database Locks:** Implemented the `processed_emails` table where the `id` is the Primary Key. This acts as a distributed mutex, guaranteeing that even if 10 webhooks arrive simultaneously, only one server instance can ever succeed in inserting the key and processing the email.
+* **Retry-Safe Processing:** Added status tracking (`processing`, `done`, `failed`, `filtered`). If a pipeline worker crashes mid-generation, the webhook retry can safely identify the `failed` status, re-acquire the lock, and process the email again.

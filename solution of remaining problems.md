@@ -11,9 +11,13 @@
 | 7 | Webhook returns 503 | /gmail/push now always returns 200 |
 | 8 | Infinite Pub/Sub retry loop | 200 response stops Google from retrying |
 | 1 | No new messages treated as failure | Returns `no_new_messages` status instead of `failed` |
-| 11, 12 | Duplicate emails & idempotency | Fixed via Supabase `processed_messages` locks |
+| 11, 12 | Duplicate emails & idempotency | Fixed via Supabase `processed_emails` global idempotency locks |
 | 2, 3, 4, 9 | LLM Rate Limits & Quotas | Fixed via `PoolRouter` round-robin & fallback |
 | 10 | Context Limits / Prompts too large | Fixed via `email-reply-parser` thread pruning & truncation |
+| 13 | Webhook burst & Race conditions | Fixed via atomic thread locks (`_CACHE_LOCK`) & in-memory debounce |
+| 14 | Database Connection Bottleneck | Fixed via Double-Checked Locking singleton in Supabase service |
+| 15 | LLM Pipeline Stalls | Fixed via `max_retries=0` allowing instant router fallback |
+| 16 | Distributed Worker Race Conditions | Fixed via Global Message Dedup Pipeline (`idempotency_key`) |
 
 ---
 
@@ -137,6 +141,8 @@ Phase 1 — Stability (fix existing problems)
     ✅ Supabase setup + idempotency
     ✅ Round robin model router
     ✅ Prompt optimization
+    ✅ Webhook debounce & thread locks
+    ✅ Database connection singleton
 
 Phase 2 — Performance
     → Celery + Redis task queue
