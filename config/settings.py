@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
     GOOGLE_API_KEY: Optional[str] = None
+    SILICONFLOW_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
     DEEPSEEK_API_KEY: Optional[str] = None
     NVIDIA_API_KEY: Optional[str] = None
     MOONSHOT_API_KEY: Optional[str] = None

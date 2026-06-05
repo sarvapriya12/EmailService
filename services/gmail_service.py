@@ -98,7 +98,7 @@ class GmailService:
             pageToken=page_token,
             )  .execute()
 
-            logger.warning("RAW HISTORY RESPONSE: %s", response)  # TEMP
+            #logger.warning("RAW HISTORY RESPONSE: %s", response) 
 
             for history_item in response.get("history", []) or []:
                 for message_added in history_item.get("messagesAdded", []) or []:
