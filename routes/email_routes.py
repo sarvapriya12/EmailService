@@ -10,7 +10,7 @@ from services.gmail_service import GmailService
 from services.gmail_watch_service import GmailWatchService
 from services.subscription_service import check_quota, increment_usage
 from config.settings import settings
-from services.database import is_already_processed, mark_as_processed, get_last_history_id, update_last_history_id
+from services.database import lock_message_for_processing, mark_as_processed, get_last_history_id, update_last_history_id
 
 logger = logging.getLogger(__name__)
 
@@ -94,18 +94,25 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
                 "reason": message_data.get("error"),
             }
 
+        sender_lower = message_data.get("sender_email", "").lower()
+        
         # Skip emails sent by the system itself
-        if message_data.get("sender_email") == settings.GMAIL_SENDER_EMAIL:
+        if sender_lower == settings.GMAIL_SENDER_EMAIL:
             logger.info("Skipping outbound email from self")
             return {"status": "ignored", "reason": "outbound_email"}
+            
+        # Skip bounce and auto-reply emails
+        if sender_lower.startswith("mailer-daemon@") or sender_lower.startswith("postmaster@") or "noreply@" in sender_lower or "no-reply@" in sender_lower:
+            logger.info("Skipping automated/bounce email from %s", sender_lower)
+            return {"status": "ignored", "reason": "automated_email"}
 
         message_id = message_data.get("message_id")
 
-        if is_already_processed(message_id):
+        if not lock_message_for_processing(message_id, message_data["sender_email"], message_data["subject"]):
             logger.info("Skipping duplicate message: %s", message_id)
             return {"status": "ignored", "reason": "duplicate"}
 
-        pipeline = EmailPipelineService(gmail=gmail, user_id="system")
+        pipeline = EmailPipelineService(gmail=gmail, user_id=None)
         processing_result = pipeline.process_incoming_email(
             sender_email=message_data["sender_email"],
             subject=message_data["subject"],
@@ -120,8 +127,6 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
 
         mark_as_processed(
             gmail_message_id=message_id,
-            sender_email=message_data["sender_email"],
-            subject=message_data["subject"],
             status=processing_result.gmail_status,
         )
 

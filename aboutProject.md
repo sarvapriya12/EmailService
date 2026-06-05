@@ -19,17 +19,18 @@ It also supports Gmail watch setup and a Pub/Sub push endpoint so watched Gmail 
 - Run the fetched email through the same classify -> extract -> generate -> send pipeline.
 - Use prompt templates stored in `prompts/` instead of hardcoded prompt strings inside service files.
 - Pass the current test suite locally.
+- Secure endpoints using JWT authentication.
+- Use a Supabase PostgreSQL database to persist tickets, processed messages, and configurations.
+- Check user subscription quotas and prevent free-tier abuse.
+- Maintain conversational tracking using a fully integrated Ticket System.
+- Automatically detect LLM rate limits and round-robin traffic using a custom `PoolRouter`.
 
 ## What The Project Cannot Do Yet
 
-- It does not have JWT authentication.
-- It does not have user accounts, login, or role-based access control.
-- It does not use a database for users, tickets, subscriptions, or Gmail tokens.
 - It does not persist processed Gmail history IDs or deduplicate watch notifications.
 - It does not have Redis rate limiting.
 - It does not use Celery or any background job queue.
 - It does not handle multi-user Gmail OAuth.
-- It does not have a ticketing system.
 - It does not have a Telegram integration.
 - It does not have an analytics dashboard.
 - It does not include a production deployment config for every cloud provider.

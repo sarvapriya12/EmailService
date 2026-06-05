@@ -11,6 +11,7 @@ from services.ticket_service import get_or_create_ticket, add_message, update_ti
 from services.filter_service import is_sender_allowed
 from services.approval_service import queue_reply
 from services.settings_service import is_review_mode_enabled
+from email_reply_parser import EmailReplyParser
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,16 @@ class EmailPipelineService:
                 gmail_status="filtered",
                 success=False,
             )
+            
+        # Step 1.5 — Clean and truncate body
+        # Strip out old email threads, forwarded history, and signatures
+        body = EmailReplyParser.parse_reply(body)
+        
+        # Safety fallback: if it's STILL too huge (e.g. they pasted a massive log file)
+        MAX_BODY_LENGTH = 15000
+        if len(body) > MAX_BODY_LENGTH:
+            logger.warning("Email body exceeds %s characters after parsing. Truncating.", MAX_BODY_LENGTH)
+            body = body[:MAX_BODY_LENGTH] + "\n\n...[EMAIL TRUNCATED DUE TO LENGTH]..."
 
         # Step 2 — Classify, extract, generate
         classification = self.classifier.classify(subject=subject, body=body)
