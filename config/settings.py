@@ -12,10 +12,7 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
     GOOGLE_API_KEY: Optional[str] = None
-    SILICONFLOW_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
-    DEEPSEEK_API_KEY: Optional[str] = None
-    MOONSHOT_API_KEY: Optional[str] = None
     NVIDIA_API_KEY: Optional[str] = None
     
 
@@ -41,7 +38,6 @@ class Settings(BaseSettings):
         """
         return [
             "groq:qwen/qwen3-32b",
-            "deepseek:deepseek-chat",
             "gemini:gemini-2.5-flash",
             "nvidia:meta/llama-3.3-70b-instruct",
             "openrouter:microsoft/mai-ds-r1:free",
