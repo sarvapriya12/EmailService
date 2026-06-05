@@ -105,15 +105,14 @@ class PoolRouter:
         with self._lock:
             start = self._counter % self._count
             self._counter += 1
-
-        index = self._next_available(start)
-
-        if index is None:
-            # All marked unavailable — reset bitfield and retry
-            logger.warning("All models unavailable — resetting availability bitfield")
-            with self._lock:
+            
+            index = self._next_available(start)
+            
+            if index is None:
+                # All marked unavailable — reset bitfield and retry
+                logger.warning("All models unavailable — resetting availability bitfield")
                 self._available = (1 << self._count) - 1
-            index = start
+                index = start
 
         for i in range(self._count):
             current = (index + i) % self._count

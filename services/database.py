@@ -1,38 +1,57 @@
 import logging
+import threading
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+_supabase_client = None
+_db_lock = threading.Lock()
 
 def _get_client():
-    from supabase import create_client
-    return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+    # from supabase import create_client
+    # return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+    global _supabase_client
+    if _supabase_client is None:
+        with _db_lock:
+            if _supabase_client is None:
+                from supabase import create_client
+                _supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+    return _supabase_client
 
 
-def lock_message_for_processing(gmail_message_id: str, sender_email: str, subject: str) -> bool:
+def acquire_idempotency_lock(idempotency_key: str, user_id: str, message_id: str) -> bool:
     try:
-        _get_client().table("processed_messages").insert({
-            "gmail_message_id": gmail_message_id,
-            "sender_email": sender_email,
-            "subject": subject,
+        _get_client().table("processed_emails").insert({
+            "id": idempotency_key,
+            "user_id": user_id,
+            "message_id": message_id,
             "status": "processing",
         }).execute()
         return True
     except Exception as exc:
-        if "duplicate key value" in str(exc).lower() or "23505" in str(exc):
+        if "duplicate key value" in str(exc).lower() or "23505" in str(exc) or "conflict" in str(exc).lower():
+            # Retry-safe processing: check if previous attempt failed
+            try:
+                response = _get_client().table("processed_emails").select("status").eq("id", idempotency_key).execute()
+                if response.data and response.data[0]["status"] == "failed":
+                    _get_client().table("processed_emails").update({"status": "processing"}).eq("id", idempotency_key).execute()
+                    logger.info("Re-acquired lock for previously failed message: %s", idempotency_key)
+                    return True
+            except Exception as inner_exc:
+                logger.warning("Failed to check retry status for %s: %s", idempotency_key, inner_exc)
             return False
-        logger.warning("Message %s lock failed or already processing: %s", gmail_message_id, exc)
+        logger.warning("Idempotency lock failed for %s: %s", idempotency_key, exc)
         return False
 
 
 def mark_as_processed(
-    gmail_message_id: str,
+    idempotency_key: str,
     status: str,
 ) -> None:
     try:
-        _get_client().table("processed_messages").update({
+        _get_client().table("processed_emails").update({
             "status": status,
-        }).eq("gmail_message_id", gmail_message_id).execute()
+        }).eq("id", idempotency_key).execute()
     except Exception as exc:
         logger.error("mark_as_processed failed: %s", exc, exc_info=True)
 

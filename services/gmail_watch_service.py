@@ -37,12 +37,6 @@ class GmailWatchService:
 		if not email_address or not history_id:
 			raise ValueError("Gmail watch notification is missing emailAddress or historyId")
 
-		logger.info(
-			"Received Gmail watch notification for %s with history_id=%s",
-			email_address,
-			history_id,
-		)
-
 		return {
 			"status": "notification_received",
 			"subscription": notification.subscription,

@@ -1,5 +1,6 @@
 import logging
 import time
+import threading
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -11,7 +12,7 @@ from services.gmail_service import GmailService
 from services.gmail_watch_service import GmailWatchService
 from services.subscription_service import check_quota, increment_usage
 from config.settings import settings
-from services.database import lock_message_for_processing, mark_as_processed, get_last_history_id, update_last_history_id
+from services.database import acquire_idempotency_lock, mark_as_processed, get_last_history_id, update_last_history_id
 
 logger = logging.getLogger(__name__)
 
@@ -20,19 +21,21 @@ router = APIRouter()
 # --- In-Memory Debounce Caches ---
 RECENT_HISTORY_IDS: dict[str, float] = {}
 RECENT_MESSAGE_IDS: dict[str, float] = {}
+_CACHE_LOCK = threading.Lock()
 
 def _is_recently_seen(id_str: str, cache: dict[str, float], ttl: int = 60) -> bool:
     now = time.time()
-    if id_str in cache and (now - cache[id_str] < ttl):
-        return True
-    cache[id_str] = now
-    if len(cache) > 1000:
-        keys_to_del = [k for k, v in cache.items() if now - v > ttl]
-        for k in keys_to_del:
-            del cache[k]
+    with _CACHE_LOCK:
+        if id_str in cache and (now - cache[id_str] < ttl):
+            return True
+        cache[id_str] = now
         if len(cache) > 1000:
-            cache.clear()
-    return False
+            keys_to_del = [k for k, v in cache.items() if now - v > ttl]
+            for k in keys_to_del:
+                del cache[k]
+            if len(cache) > 1000:
+                cache.clear()
+        return False
 
 @router.post("/process-email")
 def process_email(
@@ -94,14 +97,14 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
     try:
         listener = GmailWatchService()
         notification_data = listener.parse_notification(notification)
-        logger.info("Gmail push received for history_id=%s", notification_data["history_id"])
-        incoming_history_id = notification_data["history_id"]
-        logger.info("Gmail push received for history_id=%s", incoming_history_id)
+        incoming_history_id = str(notification_data["history_id"])
 
         # 0. In-Memory Debounce (Prevents Race Conditions)
-        if _is_recently_seen(str(incoming_history_id), RECENT_HISTORY_IDS, ttl=60):
-            logger.info("Debounced duplicate push in memory: history_id=%s", incoming_history_id)
+        if _is_recently_seen(incoming_history_id, RECENT_HISTORY_IDS, ttl=60):
+            # Return silently without logging to avoid log spam during webhook bursts
             return {"status": "ignored", "reason": "debounced_in_memory"}
+            
+        logger.info("Gmail push received for history_id=%s", incoming_history_id)
 
         last_history_id = get_last_history_id()
 
@@ -141,32 +144,30 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
             return {"status": "ignored", "reason": "automated_email"}
 
         message_id = message_data.get("message_id")
+        user_id = "system"  # Placeholder until per-user OAuth is built
+        idempotency_key = f"{user_id}:{message_id}"
 
-        # 2. In-Memory Message ID Debounce (Saves Supabase DB Calls)
-        if message_id and _is_recently_seen(str(message_id), RECENT_MESSAGE_IDS, ttl=300):
-            logger.info("Debounced duplicate message in memory: message_id=%s", message_id)
+        # 2. In-Memory Idempotency Debounce (Saves Supabase DB Calls)
+        if message_id and _is_recently_seen(idempotency_key, RECENT_MESSAGE_IDS, ttl=300):
+            logger.info("Debounced duplicate message in memory: %s", idempotency_key)
             return {"status": "ignored", "reason": "duplicate_message_in_memory"}
 
-        if not lock_message_for_processing(message_id, message_data["sender_email"], message_data["subject"]):
-            logger.info("Skipping duplicate message: %s", message_id)
+        # 3. GLOBAL MESSAGE DEDUP PIPELINE (Atomic Database Lock)
+        if not acquire_idempotency_lock(idempotency_key, user_id, message_id):
+            logger.info("Idempotency lock already held. Skipping duplicate message: %s", idempotency_key)
             return {"status": "ignored", "reason": "duplicate"}
-
+        
         pipeline = EmailPipelineService(gmail=gmail, user_id=None)
         processing_result = pipeline.process_incoming_email(
             sender_email=message_data["sender_email"],
             subject=message_data["subject"],
             body=message_data["body"],
             gmail_message_id=message_data.get("message_id"),
-            
         )
-        # Future (per-user)
-            # pipeline = EmailPipelineService(gmail=gmail, user_id=user_id_from_gmail_token_lookup)
-        
-
 
         mark_as_processed(
-            gmail_message_id=message_id,
-            status=processing_result.gmail_status,
+            idempotency_key=idempotency_key,
+            status="done" if processing_result.success else "filtered",
         )
 
         logger.info("Pipeline complete for message: %s", message_id)
@@ -186,6 +187,9 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
 
     except Exception as exc:
         logger.error("GMAIL PUSH FAILED: %s", exc, exc_info=True)
+        # If we acquired the lock but the pipeline crashed, mark it as failed for safe retries
+        if 'idempotency_key' in locals():
+            mark_as_processed(idempotency_key=idempotency_key, status="failed")
         return {"status": "error", "detail": str(exc)}
 
 
