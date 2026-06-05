@@ -15,8 +15,9 @@ class Settings(BaseSettings):
     SILICONFLOW_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
     DEEPSEEK_API_KEY: Optional[str] = None
-    NVIDIA_API_KEY: Optional[str] = None
     MOONSHOT_API_KEY: Optional[str] = None
+    NVIDIA_API_KEY: Optional[str] = None
+    
 
     # Gmail
     GMAIL_CLIENT_ID: Optional[str] = None
@@ -43,39 +44,25 @@ class Settings(BaseSettings):
             "deepseek:deepseek-chat",
             "gemini:gemini-2.5-flash",
             "nvidia:meta/llama-3.3-70b-instruct",
-            "openrouter:qwen/qwen3-32b:free",
+            "openrouter:microsoft/mai-ds-r1:free",
         ]
-
     @property
     def EXTRACT_MODELS(self) -> list[str]:
-        """
-        JSON extraction
-        Structured data extraction
-        Entity extraction
-        """
         return [
-            "deepseek:deepseek-chat",
             "groq:qwen/qwen3-32b",
             "gemini:gemini-2.5-flash",
             "nvidia:meta/llama-3.3-70b-instruct",
-            "openrouter:deepseek/deepseek-chat-v3:free",
+            "openrouter:microsoft/mai-ds-r1:free",
         ]
+
 
     @property
     def GENERATE_MODELS(self) -> list[str]:
-        """
-        Customer replies
-        Email drafting
-        Summaries
-        Professional responses
-        """
         return [
             "gemini:gemini-2.5-flash",
-            "moonshot:kimi-k2",
-            "deepseek:deepseek-chat",
             "groq:qwen/qwen3-32b",
             "nvidia:meta/llama-3.3-70b-instruct",
+            "openrouter:microsoft/mai-ds-r1:free",
         ]
-
 
 settings = Settings()

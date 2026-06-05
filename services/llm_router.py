@@ -51,12 +51,6 @@ def _build_client(provider_model: str) -> Optional[tuple[str, Any]]:
             api_key=settings.NVIDIA_API_KEY,
         ))
     
-    if provider in ("siliconflow", "deepseek", "moonshot"):
-        api_key = getattr(settings, f"{provider.upper()}_API_KEY", None)
-        if not api_key:
-            return None
-        client = init_chat_model(provider=provider, model=model, api_key=api_key)
-        return (provider_model, client)
 
     logger.warning("Unknown provider: %s", provider)
     return None
