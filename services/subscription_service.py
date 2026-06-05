@@ -1,10 +1,11 @@
 import logging
-from services.database import supabase
+from services.database import _get_client
 
 logger = logging.getLogger(__name__)
 
 def get_or_create_subscription(user_id: str) -> dict:
     try:
+        supabase = _get_client()
         response = supabase.table("subscriptions").select("*").eq(
             "user_id", user_id
         ).execute()
@@ -49,6 +50,7 @@ def check_quota(user_id: str) -> bool:
 def increment_usage(user_id: str) -> None:
     subscription = get_or_create_subscription(user_id)
     try:
+        supabase = _get_client()
         supabase.table("subscriptions").update({
             "emails_used": subscription["emails_used"] + 1
         }).eq("user_id", user_id).execute()
