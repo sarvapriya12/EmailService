@@ -56,10 +56,10 @@ def mark_as_processed(
         logger.error("mark_as_processed failed: %s", exc, exc_info=True)
 
 
-def get_last_history_id() -> str:
+def get_last_history_id(user_id: str = "system") -> str:
     try:
         response = _get_client().table("gmail_watch_state").select("last_history_id").eq(
-            "id", 1
+            "user_id", user_id
         ).execute()
         if response.data:
             return response.data[0]["last_history_id"]
@@ -69,11 +69,11 @@ def get_last_history_id() -> str:
         return "0"
 
 
-def update_last_history_id(history_id: str) -> None:
+def update_last_history_id(history_id: str, user_id: str = "system") -> None:
     try:
-        _get_client().table("gmail_watch_state").update({
+        _get_client().table("gmail_watch_state").upsert({
+            "user_id": user_id,
             "last_history_id": history_id,
-            "updated_at": "now()"
-        }).eq("id", 1).execute()
+        }, on_conflict="user_id").execute()
     except Exception as exc:
         logger.error("update_last_history_id failed: %s", exc)

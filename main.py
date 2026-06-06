@@ -2,11 +2,13 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from routes.auth_routes import router as auth_router
+from routes.business_routes import router as business_router
 from routes.email_routes import router
 from routes.ticket_routes import router as ticket_router
 from routes.filter_routes import router as filter_router
 from routes.queue_routes import router as queue_router
 from routes.settings_routes import router as settings_router
+from routes.gmail_oauth_routes import router as gmail_oauth_router
 
 
 logging.basicConfig(level=logging.INFO)
@@ -21,7 +23,7 @@ async def lifespan(app: FastAPI):
         gmail = GmailService()
         result = gmail.watch_inbox()
         if result.get("status") == "watch_started" and result.get("history_id"):
-            update_last_history_id(str(result["history_id"]))
+            update_last_history_id(str(result["history_id"]), "system")
             logger.info("History ID updated on startup: %s", result["history_id"])
         logger.info("Gmail watch registered on startup: %s", result.get("status"))
     except Exception as exc:
@@ -50,6 +52,8 @@ def create_app() -> FastAPI:
     app.include_router(filter_router)
     app.include_router(queue_router)
     app.include_router(settings_router)
+    app.include_router(business_router)
+    app.include_router(gmail_oauth_router)
     return app
 
 

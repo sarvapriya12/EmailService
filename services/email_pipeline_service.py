@@ -11,6 +11,7 @@ from services.ticket_service import get_or_create_ticket, add_message, update_ti
 from services.filter_service import is_sender_allowed
 from services.approval_service import queue_reply
 from services.settings_service import is_review_mode_enabled
+from services.business_service import get_active_config
 from email_reply_parser import EmailReplyParser
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,8 @@ class EmailPipelineService:
         self.classifier = EmailClassifier(router=self.router)
         self.extractor = EmailExtractor(router=self.router)
         self.generator = EmailGenerator(router=self.router)
-        self.gmail = gmail or GmailService()
         self.user_id = user_id
+        self.gmail = gmail or GmailService(user_id=self.user_id)
 
     def process(
         self,
@@ -62,13 +63,30 @@ class EmailPipelineService:
             logger.warning("Email body exceeds %s characters after parsing. Truncating.", MAX_BODY_LENGTH)
             body = body[:MAX_BODY_LENGTH] + "\n\n...[EMAIL TRUNCATED DUE TO LENGTH]..."
 
-        # Step 2 — Classify, extract, generate
-        classification = self.classifier.classify(subject=subject, body=body)
-        extracted_raw = self.extractor.extract(subject=subject, body=body)
+        # Step 1.8 — Fetch active business config
+        if self.user_id:
+            config = get_active_config(self.user_id)
+        else:
+            config = {
+                "categories": ["billing", "refund", "technical_support", "complaint", "general_inquiry"],
+                "extraction_fields": ["customer_name", "issue", "priority", "reference_number"],
+                "tone": "friendly",
+                "style": "concise"
+            }
+
+        # Step 2 — Classify, extract, generate (with dynamic config)
+        classification = self.classifier.classify(
+            subject=subject, body=body, categories=config.get("categories")
+        )
+        extracted_raw = self.extractor.extract(
+            subject=subject, body=body, fields=config.get("extraction_fields")
+        )
         reply = self.generator.generate(
             subject=subject,
             body=body,
             extracted=extracted_raw,
+            tone=config.get("tone"),
+            style=config.get("style")
         )
 
         # Step 3 — Ticket management

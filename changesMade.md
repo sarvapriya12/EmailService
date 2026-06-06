@@ -41,3 +41,21 @@ To completely eliminate duplicate processing across multiple server instances, t
 * **Global Keys:** Replaced `gmail_message_id` checks with a global `idempotency_key` (combining `user_id:message_id`).
 * **Atomic Database Locks:** Implemented the `processed_emails` table where the `id` is the Primary Key. This acts as a distributed mutex, guaranteeing that even if 10 webhooks arrive simultaneously, only one server instance can ever succeed in inserting the key and processing the email.
 * **Retry-Safe Processing:** Added status tracking (`processing`, `done`, `failed`, `filtered`). If a pipeline worker crashes mid-generation, the webhook retry can safely identify the `failed` status, re-acquire the lock, and process the email again.
+
+### 11. Section 1 — Business Profiles (Dynamic Configuration)
+To allow different organizations to use the system with customized AI rules, Business Profiles were introduced.
+* **Database Tables:** Added `business_profile_presets` (system-defined) and `user_business_profiles` (user overrides).
+* **Dynamic Fallback Merging:** `business_service.py` intelligently merges a user's custom settings (tone, style, categories) with their chosen business preset.
+* **Pipeline Integration:** `EmailPipelineService` now fetches this configuration per-user and injects dynamic `$tone_style_instruction`, `$categories`, and `$fields` into the LangChain templates, replacing hardcoded rules.
+
+### 12. Section 2 — Per-User Gmail OAuth (Multi-Tenancy)
+The system was upgraded from a single-tenant (one hardcoded `.env` email) to a fully multi-tenant architecture.
+* **Secure Token Vault:** The `gmail_oauth_tokens` table was created. Google Refresh Tokens are encrypted at rest using AES-128 (via `cryptography`'s Fernet) and a master `OAUTH_ENCRYPTION_KEY`.
+* **Per-User Credentials:** `GmailService` now takes an optional `user_id`, dynamically fetching, decrypting, and refreshing tokens on the fly from the database.
+* **Multi-Tenant Webhook Routing:** `POST /gmail/push` dynamically parses the `email_address` from the incoming Pub/Sub payload, maps it back to a `user_id` in the database, and processes the email using that specific user's OAuth tokens and Business Profile rules.
+
+### 13. Multi-Tenant History ID Tracking
+When moving to per-user OAuth, the single global `history_id` cursor was creating a race condition where one user receiving an email would advance the cursor for everyone, causing missed emails for other users.
+* **Watch State DB:** Updated the `gmail_watch_state` table to track by `user_id` instead of a hardcoded `id=1`. `services/database.py` was updated to use `.upsert()` with `on_conflict="user_id"`.
+* **In-Memory Cache Isolation:** Updated the `RECENT_HISTORY_IDS` debounce cache in `routes/email_routes.py` to prefix keys with `user_id` (e.g., changing `incoming_history_id` to `f"{user_id}:{incoming_history_id}"`) so users with coincidentally identical history IDs do not block each other.
+* **Dynamic Webhook Cursor:** The `/gmail/push` webhook now resolves the `user_id` immediately upon receiving the payload and passes it to `get_last_history_id(user_id)` and `update_last_history_id(...)`, guaranteeing independent email cursors per mailbox.

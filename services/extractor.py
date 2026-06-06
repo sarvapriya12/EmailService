@@ -24,28 +24,29 @@ class EmailExtractor:
 	def __init__(self, router: Optional[PoolRouter] = None) -> None:
 		self.router = router or build_extract_pool()
 
-	def extract(self, subject: str, body: str) -> dict[str, object]:
-		prompt = self._build_prompt(subject=subject, body=body)
+	def extract(self, subject: str, body: str, fields: Optional[list[str]] = None) -> dict[str, object]:
+		active_fields = fields or list(EXTRACTION_FIELDS)
+		prompt = self._build_prompt(subject=subject, body=body, fields=active_fields)
 		logger.info("Extracting email data")
 
 		response = self.router.invoke(prompt)
-		parsed = self._parse_response(response)
+		parsed = self._parse_response(response, active_fields)
 		parsed["raw_response"] = response
 
 		return parsed
 
-	def _build_prompt(self, subject: str, body: str) -> str:
-		fields = ", ".join(EXTRACTION_FIELDS)
+	def _build_prompt(self, subject: str, body: str, fields: list[str]) -> str:
+		fields_str = ", ".join(fields)
 
 		return render_prompt(
 			"email_extractor.txt",
-			fields=fields,
+			fields=fields_str,
 			subject=subject,
 			body=body,
 		)
 
-	def _parse_response(self, response: str) -> dict[str, object]:
-		parsed: dict[str, object] = {field: None for field in EXTRACTION_FIELDS}
+	def _parse_response(self, response: str, fields: list[str]) -> dict[str, object]:
+		parsed: dict[str, object] = {field: None for field in fields}
 
 		for line in response.splitlines():
 			if ":" not in line:
@@ -62,7 +63,7 @@ class EmailExtractor:
 				else:
 					parsed[normalized_key] = cleaned
 
-		if parsed["priority"] is None:
+		if "priority" in parsed and parsed["priority"] is None:
 			parsed["priority"] = self._infer_priority(response)
 
 		return parsed

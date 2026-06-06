@@ -34,3 +34,5 @@ python-jose[cryptography]
 langchain_nvidia_ai_endpoints
 langchain_moonshot
 email-reply-parser
+cryptography
+requests

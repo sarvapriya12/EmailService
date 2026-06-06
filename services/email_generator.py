@@ -14,8 +14,15 @@ class EmailGenerator:
 	def __init__(self, router: Optional[PoolRouter] = None) -> None:
 		self.router = router or build_generate_pool()
 
-	def generate(self, subject: str, body: str, extracted: dict[str, object]) -> dict[str, str]:
-		prompt = self._build_prompt(subject, body, extracted)
+	def generate(
+		self, 
+		subject: str, 
+		body: str, 
+		extracted: dict[str, object],
+		tone: str = "friendly",
+		style: str = "concise"
+	) -> dict[str, str]:
+		prompt = self._build_prompt(subject, body, extracted, tone, style)
 		logger.info("Generating support reply")
 
 		response = self.router.invoke(prompt)
@@ -25,7 +32,14 @@ class EmailGenerator:
 			"body": response.strip(),
 		}
 
-	def _build_prompt(self, subject: str, body: str, extracted: dict[str, object]) -> str:
+	def _build_prompt(
+		self, 
+		subject: str, 
+		body: str, 
+		extracted: dict[str, object],
+		tone: str,
+		style: str
+	) -> str:
 		customer_name = extracted.get("customer_name") or "customer"
 		issue = extracted.get("issue") or "the reported issue"
 		priority = extracted.get("priority") or "medium"
@@ -37,6 +51,8 @@ class EmailGenerator:
 			customer_name=customer_name,
 			issue=issue,
 			priority=priority,
+			tone=tone,
+			style=style,
 		)
 
 

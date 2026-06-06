@@ -17,6 +17,11 @@ def load_prompt_template(template_name: str) -> Template:
 
 
 def render_prompt(template_name: str, **values: object) -> str:
+	if "tone" in values and "style" in values:
+		tone = values.pop("tone")
+		style = values.pop("style")
+		values["tone_style_instruction"] = f"Use a {tone} tone and a {style} style."
+
 	return load_prompt_template(template_name).safe_substitute(
 		{key: str(value) for key, value in values.items()}
 	)

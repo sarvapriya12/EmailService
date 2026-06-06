@@ -2,7 +2,7 @@ import base64
 from email.utils import parseaddr
 import logging
 from email.mime.text import MIMEText
-from typing import Any
+from typing import Any, Optional
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -16,18 +16,30 @@ logger = logging.getLogger(__name__)
 class GmailService:
     """Sends replies through Gmail."""
 
-    def __init__(self) -> None:
+    def __init__(self, user_id: Optional[str] = None) -> None:
+        self.user_id = user_id
+        self.sender_email = settings.GMAIL_SENDER_EMAIL
         self.service = self._build_service()
 
     def _build_service(self):
-        creds = Credentials(
-            token=None,
-            refresh_token=settings.GMAIL_REFRESH_TOKEN,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=settings.GMAIL_CLIENT_ID,
-            client_secret=settings.GMAIL_CLIENT_SECRET,
-        )
-        creds.refresh(Request())
+        creds = None
+        if self.user_id:
+            from services.gmail_oauth_service import get_credentials, is_connected
+            creds = get_credentials(self.user_id)
+            if creds:
+                conn_info = is_connected(self.user_id)
+                if conn_info.get("connected"):
+                    self.sender_email = conn_info["email"]
+
+        if not creds:
+            creds = Credentials(
+                token=None,
+                refresh_token=settings.GMAIL_REFRESH_TOKEN,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=settings.GMAIL_CLIENT_ID,
+                client_secret=settings.GMAIL_CLIENT_SECRET,
+            )
+            creds.refresh(Request())
         return build("gmail", "v1", credentials=creds)
 
     @staticmethod
@@ -120,7 +132,7 @@ class GmailService:
         try:
             message = MIMEText(body)
             message["to"] = to_email
-            message["from"] = settings.GMAIL_SENDER_EMAIL
+            message["from"] = self.sender_email
             message["subject"] = subject
 
             encoded = base64.urlsafe_b64encode(

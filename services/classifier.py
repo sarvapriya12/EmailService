@@ -27,12 +27,13 @@ class EmailClassifier:
 	def __init__(self, router: Optional[PoolRouter] = None) -> None:
 		self.router = router or build_classify_pool()
 
-	def classify(self, subject: str, body: str) -> dict[str, object]:
-		prompt = self._build_prompt(subject=subject, body=body)
+	def classify(self, subject: str, body: str, categories: Optional[list[str]] = None) -> dict[str, object]:
+		active_categories = categories or list(EMAIL_CATEGORIES)
+		prompt = self._build_prompt(subject=subject, body=body, categories=active_categories)
 		logger.info("Classifying email")
 
 		response = self.router.invoke(prompt)
-		category = self._parse_category(response)
+		category = self._parse_category(response, active_categories)
 
 		return {
 			"category": category,
@@ -40,20 +41,20 @@ class EmailClassifier:
 			"raw_response": response,
 		}
 
-	def _build_prompt(self, subject: str, body: str) -> str:
-		categories = ", ".join(EMAIL_CATEGORIES)
+	def _build_prompt(self, subject: str, body: str, categories: list[str]) -> str:
+		categories_str = ", ".join(categories)
 
 		return render_prompt(
 			"email_classifier.txt",
-			categories=categories,
+			categories=categories_str,
 			subject=subject,
 			body=body,
 		)
 
-	def _parse_category(self, response: str) -> str:
+	def _parse_category(self, response: str, categories: list[str]) -> str:
 		normalized = response.lower()
 
-		for category in EMAIL_CATEGORIES:
+		for category in categories:
 			if re.search(rf"\b{re.escape(category)}\b", normalized):
 				return category
 

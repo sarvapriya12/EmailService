@@ -75,7 +75,7 @@ def watch_gmail(
     current_user: dict = Depends(get_current_user),
 ) -> dict[str, object]:
     try:
-        gmail = GmailService()
+        gmail = GmailService(user_id=current_user["user_id"])
         result = gmail.watch_inbox()
 
         if result.get("status") == "failed":
@@ -98,15 +98,20 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
         listener = GmailWatchService()
         notification_data = listener.parse_notification(notification)
         incoming_history_id = str(notification_data["history_id"])
+        receiving_email = notification_data.get("email_address")
+
+        from services.gmail_oauth_service import get_user_by_email
+        resolved_user_id = get_user_by_email(receiving_email) if receiving_email else None
+        user_id = resolved_user_id or "system"
 
         # 0. In-Memory Debounce (Prevents Race Conditions)
-        if _is_recently_seen(incoming_history_id, RECENT_HISTORY_IDS, ttl=60):
+        if _is_recently_seen(f"{user_id}:{incoming_history_id}", RECENT_HISTORY_IDS, ttl=60):
             # Return silently without logging to avoid log spam during webhook bursts
             return {"status": "ignored", "reason": "debounced_in_memory"}
             
         logger.info("Gmail push received for history_id=%s", incoming_history_id)
 
-        last_history_id = get_last_history_id()
+        last_history_id = get_last_history_id(user_id)
 
         # 1. Strict History ID Tracking (Webhook Debounce)
         try:
@@ -116,13 +121,12 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
         except ValueError:
             pass  # Fallback if history_id is somehow not numeric
 
-        gmail = GmailService()
+        gmail = GmailService(user_id=resolved_user_id)
         # Use stored history ID instead of notification history ID
-        last_history_id = get_last_history_id()
         message_data = gmail.fetch_latest_message_since(last_history_id)
 
         # Update stored history ID to move the cursor forward
-        update_last_history_id(incoming_history_id)
+        update_last_history_id(incoming_history_id, user_id)
 
         if message_data.get("status") in ("failed", "no_new_messages"):
             logger.info("Skipping push — reason: %s", message_data.get("error"))
@@ -134,7 +138,8 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
         sender_lower = message_data.get("sender_email", "").lower()
         
         # Skip emails sent by the system itself
-        if sender_lower == settings.GMAIL_SENDER_EMAIL:
+        current_sender_email = (gmail.sender_email or settings.GMAIL_SENDER_EMAIL).lower()
+        if sender_lower == current_sender_email:
             logger.info("Skipping outbound email from self")
             return {"status": "ignored", "reason": "outbound_email"}
             
@@ -144,7 +149,6 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
             return {"status": "ignored", "reason": "automated_email"}
 
         message_id = message_data.get("message_id")
-        user_id = "system"  # Placeholder until per-user OAuth is built
         idempotency_key = f"{user_id}:{message_id}"
 
         # 2. In-Memory Idempotency Debounce (Saves Supabase DB Calls)
@@ -157,7 +161,7 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
             logger.info("Idempotency lock already held. Skipping duplicate message: %s", idempotency_key)
             return {"status": "ignored", "reason": "duplicate"}
         
-        pipeline = EmailPipelineService(gmail=gmail, user_id=None)
+        pipeline = EmailPipelineService(gmail=gmail, user_id=resolved_user_id)
         processing_result = pipeline.process_incoming_email(
             sender_email=message_data["sender_email"],
             subject=message_data["subject"],
