@@ -36,3 +36,6 @@ langchain_moonshot
 email-reply-parser
 cryptography
 requests
+celery
+redis
+
