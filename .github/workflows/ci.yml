@@ -21,6 +21,7 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      OAUTH_ENCRYPTION_KEY: "cw_0x689RpI-jtRR7oE8h_eQsKIMA5RoX2Ie3V-3_1o="
     timeout-minutes: 15
 
     steps:
