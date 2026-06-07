@@ -11,6 +11,7 @@ from services.email_pipeline_service import EmailPipelineService
 from services.gmail_service import GmailService
 from services.gmail_watch_service import GmailWatchService
 from services.subscription_service import check_quota, increment_usage
+from tasks.email_tasks import process_email_background_task
 from config.settings import settings
 from services.database import acquire_idempotency_lock, mark_as_processed, get_last_history_id, update_last_history_id
 
@@ -41,7 +42,7 @@ def _is_recently_seen(id_str: str, cache: dict[str, float], ttl: int = 60) -> bo
 def process_email(
     email_request: EmailRequest,
     current_user: dict = Depends(get_current_user),
-) -> EmailResponse:
+) -> dict:
     try:
         user_id = current_user["user_id"]
 
@@ -51,15 +52,16 @@ def process_email(
                 detail="Email quota exceeded. Please upgrade your plan."
             )
 
-        pipeline = EmailPipelineService(user_id=current_user["user_id"])
-        result = pipeline.process_incoming_email(
-            sender_email=email_request.sender_email,
-            subject=email_request.subject,
-            body=email_request.body,
+        task = process_email_background_task.delay(
+            user_id,
+            {
+                "sender_email": email_request.sender_email,
+                "subject": email_request.subject,
+                "body": email_request.body,
+            }
         )
 
-        increment_usage(user_id)
-        return result
+        return {"status": "queued", "task_id": task.id}
 
     except HTTPException:
         raise
@@ -161,25 +163,20 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
             logger.info("Idempotency lock already held. Skipping duplicate message: %s", idempotency_key)
             return {"status": "ignored", "reason": "duplicate"}
         
-        pipeline = EmailPipelineService(gmail=gmail, user_id=resolved_user_id)
-        processing_result = pipeline.process_incoming_email(
-            sender_email=message_data["sender_email"],
-            subject=message_data["subject"],
-            body=message_data["body"],
-            gmail_message_id=message_data.get("message_id"),
+        process_email_background_task.delay(
+            resolved_user_id,
+            {
+                "sender_email": message_data["sender_email"],
+                "subject": message_data["subject"],
+                "body": message_data["body"],
+                "gmail_message_id": message_data.get("message_id"),
+                "idempotency_key": idempotency_key,
+            }
         )
-
-        mark_as_processed(
-            idempotency_key=idempotency_key,
-            status="done" if processing_result.success else "filtered",
-        )
-
-        logger.info("Pipeline complete for message: %s", message_id)
 
         return {
-            "notification": notification_data,
-            "message": message_data,
-            "processing": processing_result.model_dump(),
+            "status": "queued",
+            "message_id": message_id
         }
 
     except ValueError as exc:

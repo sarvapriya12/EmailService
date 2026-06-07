@@ -59,3 +59,26 @@ When moving to per-user OAuth, the single global `history_id` cursor was creatin
 * **Watch State DB:** Updated the `gmail_watch_state` table to track by `user_id` instead of a hardcoded `id=1`. `services/database.py` was updated to use `.upsert()` with `on_conflict="user_id"`.
 * **In-Memory Cache Isolation:** Updated the `RECENT_HISTORY_IDS` debounce cache in `routes/email_routes.py` to prefix keys with `user_id` (e.g., changing `incoming_history_id` to `f"{user_id}:{incoming_history_id}"`) so users with coincidentally identical history IDs do not block each other.
 * **Dynamic Webhook Cursor:** The `/gmail/push` webhook now resolves the `user_id` immediately upon receiving the payload and passes it to `get_last_history_id(user_id)` and `update_last_history_id(...)`, guaranteeing independent email cursors per mailbox.
+
+### 14. Section 3.5 — Admin System (Manual Provisioning)
+To bypass third-party payment gateway friction (Stripe/Razorpay compliance), a custom Admin System was built.
+* **Super Admin Auth:** Added `is_admin` flag to `user_settings` and a `verify_admin` dependency guard in FastAPI to strictly protect admin routes.
+* **System Stats:** `GET /admin/stats` tracks global email processing volume, failures, total tickets, and active user count.
+* **User Management & Upgrades:** `GET /admin/users` lists all users and their connected Gmails, and `POST /admin/users/{user_id}/upgrade` allows the admin to manually bypass billing and instantly assign higher tier limits.
+
+### 15. Section 4 — React Frontend Initialization
+Transitioned the project into a Monorepo structure by initializing the frontend.
+* **Vite + React:** Scaffolded a new React application inside the `frontend/` directory.
+* **Tailwind CSS:** Configured `tailwind.config.js` and injected base styles for rapid UI development.
+* **Axios API Client:** Created `src/services/api.js` with an interceptor to seamlessly inject the JWT `Bearer` token into every request to the FastAPI backend.
+
+### 16. Celery & Redis Task Queue Integration (Asynchronous Processing)
+To solve Google Pub/Sub timeout issues and thread pool starvation, the heavy LLM pipeline was offloaded to background workers.
+* **Queue Implementation:** Configured `celery_app.py` connecting to Redis with separated databases for the message broker (`/0`) and result backend (`/1`).
+* **Webhook Offloading:** The `POST /gmail/push` and `POST /process-email` endpoints now instantly return a `200 OK` or `202 Accepted` alongside a `task_id`, handing the actual processing to `process_email_background_task.delay()`.
+* **Task Polling Endpoint:** Added `routes/task_routes.py` with a `GET /tasks/{task_id}` endpoint to allow the frontend to poll for asynchronous completion.
+
+### 17. OAuth Credential In-Memory Caching (Database Optimization)
+To fix a critical database bottleneck where processing a single email resulted in multiple redundant database queries for the user's OAuth tokens.
+* **Cache Layer:** Implemented `_CREDENTIALS_CACHE` in `services/gmail_oauth_service.py` with a thread-safe `_CACHE_LOCK`.
+* **TTL Logic:** The cache securely holds decrypted credentials in memory for 5 minutes (`_CACHE_TTL`), radically reducing database I/O latency while remaining responsive to revoked or expired tokens.

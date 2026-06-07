@@ -1,6 +1,8 @@
 import logging
 import os
 from typing import Any, Dict, Optional
+import time
+from threading import Lock
 
 import requests
 from cryptography.fernet import Fernet
@@ -17,8 +19,10 @@ logger = logging.getLogger(__name__)
 # For Fernet, the key must be a URL-safe base64-encoded 32-byte key.
 ENCRYPTION_KEY = os.environ.get("OAUTH_ENCRYPTION_KEY")
 if not ENCRYPTION_KEY:
-    logger.warning("OAUTH_ENCRYPTION_KEY not set. Generating a temporary key. Do not use this in production!")
-    ENCRYPTION_KEY = Fernet.generate_key().decode('utf-8')
+    raise ValueError(
+        "CRITICAL: OAUTH_ENCRYPTION_KEY environment variable is missing. "
+        "You must set a static 32-byte url-safe base64-encoded key to safely encrypt and decrypt OAuth tokens."
+    )
 
 fernet = Fernet(ENCRYPTION_KEY)
 
@@ -39,6 +43,11 @@ CLIENT_CONFIG = {
     }
 }
 REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/gmail/callback")
+
+# Cache for OAuth credentials to reduce database reads
+_CREDENTIALS_CACHE = {}
+_CACHE_LOCK = Lock()
+_CACHE_TTL = 300  # 5 minutes
 
 
 def encrypt_token(token: str) -> str:
@@ -115,6 +124,10 @@ def exchange_code(user_id: str, code: str) -> bool:
         else:
             supabase.table("gmail_oauth_tokens").insert(token_data).execute()
             
+        # Clear any cached credentials for this user
+        with _CACHE_LOCK:
+            _CREDENTIALS_CACHE.pop(user_id, None)
+            
         return True
     except Exception as exc:
         logger.error("exchange_code failed: %s", exc)
@@ -123,6 +136,15 @@ def exchange_code(user_id: str, code: str) -> bool:
 
 def get_credentials(user_id: str) -> Optional[Credentials]:
     """Retrieves and decrypts stored token, refreshes if expired."""
+    # 1. Check in-memory cache first to avoid DB hit
+    with _CACHE_LOCK:
+        cached_data = _CREDENTIALS_CACHE.get(user_id)
+        if cached_data:
+            creds, timestamp = cached_data
+            if time.time() - timestamp < _CACHE_TTL:
+                if not (creds.expired and creds.refresh_token):
+                    return creds
+
     try:
         supabase = _get_client()
         response = supabase.table("gmail_oauth_tokens").select("*").eq("user_id", user_id).execute()
@@ -150,6 +172,10 @@ def get_credentials(user_id: str) -> Optional[Credentials]:
                 "updated_at": "now()"
             }).eq("user_id", user_id).execute()
             
+        # 3. Update the cache
+        with _CACHE_LOCK:
+            _CREDENTIALS_CACHE[user_id] = (creds, time.time())
+            
         return creds
     except Exception as exc:
         logger.error("get_credentials failed for user %s: %s", user_id, exc)
@@ -166,6 +192,11 @@ def revoke_token(user_id: str) -> bool:
                           headers={'content-type': 'application/x-www-form-urlencoded'})
         
         _get_client().table("gmail_oauth_tokens").delete().eq("user_id", user_id).execute()
+        
+        # Clear cache on revocation
+        with _CACHE_LOCK:
+            _CREDENTIALS_CACHE.pop(user_id, None)
+            
         return True
     except Exception as exc:
         logger.error("revoke_token failed: %s", exc)
