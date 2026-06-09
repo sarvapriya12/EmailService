@@ -11,6 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN chmod +x start.sh
+
 EXPOSE 8080
 
-CMD ["sh", "-c", "celery -A celery_app worker --loglevel=info --detach && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "start.sh"]

@@ -22,6 +22,8 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_soft_time_limit=270, # Gives tasks a 30-second warning to clean up before hard kill
-    task_time_limit=300,  # Failsafe: kill tasks that take longer than 5 minutes
+    task_soft_time_limit=270,
+    task_time_limit=300,
+    broker_use_ssl={"ssl_cert_reqs": None} if REDIS_URL.startswith("rediss://") else None,
+    redis_backend_use_ssl={"ssl_cert_reqs": None} if CELERY_RESULT_BACKEND.startswith("rediss://") else None,
 )
