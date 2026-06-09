@@ -82,3 +82,11 @@ To solve Google Pub/Sub timeout issues and thread pool starvation, the heavy LLM
 To fix a critical database bottleneck where processing a single email resulted in multiple redundant database queries for the user's OAuth tokens.
 * **Cache Layer:** Implemented `_CREDENTIALS_CACHE` in `services/gmail_oauth_service.py` with a thread-safe `_CACHE_LOCK`.
 * **TTL Logic:** The cache securely holds decrypted credentials in memory for 5 minutes (`_CACHE_TTL`), radically reducing database I/O latency while remaining responsive to revoked or expired tokens.
+
+### 18. External Cron for Gmail Watch Renewals (Multi-Worker Safe)
+To make the system safe for multi-worker deployments (e.g., Gunicorn/Uvicorn with multiple workers) and to guarantee execution regardless of server restarts, the internal `asyncio.sleep` timer for Gmail watch renewals was removed. 
+* **New Secure Endpoint:** Created `POST /system/renew-watches` protected by an `X-Cron-Secret` header.
+* **Multi-Tenant Renewal:** The endpoint fetches all active connected users from the `gmail_oauth_tokens` table and safely renews their watch subscriptions individually.
+
+### 19. Strict OAuth Encryption Key Enforcement
+To prevent the ephemeral key risk (where a server restart would generate a new fallback key and permanently invalidate all stored OAuth refresh tokens in the database), `services/gmail_oauth_service.py` was updated to strictly require `OAUTH_ENCRYPTION_KEY` in the environment variables on startup. The CI pipeline was also updated to supply a dummy key to pass sanity checks safely.
