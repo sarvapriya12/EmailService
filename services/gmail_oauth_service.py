@@ -78,7 +78,9 @@ def get_oauth_url(user_id: str) -> str:
             access_type='offline',
             include_granted_scopes='true',
             prompt='consent',
-            state=user_id
+            state=user_id,
+            code_challenge=None,
+            code_challenge_method=None,
         )
         return auth_url
     except Exception as exc:
