@@ -79,7 +79,7 @@ def approve(queue_id: str) -> dict:
                 direction="outbound",
                 body=item["original_reply_body"],
             )
-            update_ticket_status(item["ticket_id"], "resolved")
+            update_ticket_status(item["ticket_id"], "resolved", resolution="approved")
 
         return {"status": "approved", "gmail_status": send_result.get("status")}
 
@@ -90,10 +90,21 @@ def approve(queue_id: str) -> dict:
 
 def reject(queue_id: str) -> dict:
     try:
+        # Fetch ticket_id before updating status
+        item_response = _get_client().table("approval_queue").select(
+            "ticket_id"
+        ).eq("id", queue_id).execute()
+
         _get_client().table("approval_queue").update({
             "status": "rejected",
             "acted_at": "now()",
         }).eq("id", queue_id).execute()
+
+        # Close the associated ticket so it appears in history
+        if item_response.data and item_response.data[0].get("ticket_id"):
+            from services.ticket_service import update_ticket_status
+            update_ticket_status(item_response.data[0]["ticket_id"], "closed", resolution="rejected")
+
         return {"status": "rejected"}
     except Exception as exc:
         logger.error("reject failed: %s", exc)
@@ -131,7 +142,7 @@ def edit_and_send(queue_id: str, edited_body: str) -> dict:
                 direction="outbound",
                 body=edited_body,
             )
-            update_ticket_status(item["ticket_id"], "resolved")
+            update_ticket_status(item["ticket_id"], "resolved", resolution="edited_and_sent")
 
         return {"status": "edited_and_sent", "gmail_status": send_result.get("status")}
 

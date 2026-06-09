@@ -98,6 +98,7 @@ class EmailPipelineService:
                 sender_email=sender_email,
                 subject=subject,
                 user_id=self.user_id,
+                category=classification["category"],
             )
             ticket = ticket_result.get("ticket")
 
@@ -154,13 +155,14 @@ class EmailPipelineService:
             body=reply["body"],
         )
 
-        # Step 6 — Store outbound message in ticket
+        # Step 6 — Store outbound message in ticket and resolve
         if ticket_id:
             add_message(
                 ticket_id=ticket_id,
                 direction="outbound",
                 body=reply["body"],
             )
+            update_ticket_status(ticket_id, "resolved", resolution="auto_sent")
 
         return EmailResponse(
             category=classification["category"],

@@ -55,8 +55,23 @@ def create_app() -> FastAPI:
     )
 
     @app.get("/", tags=["system"])
-    def root() -> dict[str, str]:
-        return {"message": "AI Email Support System is running"}
+    def root() -> dict:
+        return {
+            "service": "AI Email Support System",
+            "status": "running",
+            "frontend_features": {
+                "auth": "Supabase email/password + Gmail OAuth connection",
+                "dashboard": "Key metrics (Emails Used, Open Tickets, Pending Approvals), recent tickets, and quick actions",
+                "analytics": "Visual breakdown of tickets by category (bar chart) and resolution status (pie chart)",
+                "tickets": "Complete inbox view with filtering, status management, and full two-way conversation threads (customer + AI replies)",
+                "approval_queue": "Review mode feature allowing users to approve, edit, or reject AI-generated replies before they are sent",
+                "business_profiles": "Pre-configured AI behavior presets (e-commerce, SaaS, agency) with customizable tone and style overrides",
+                "filters": "Sender/domain whitelist and blacklist management for spam control",
+                "settings": "Review mode toggle, Gmail account management, and notification preferences",
+                "subscription": "Plan tier management, usage tracking (emails processed vs limit), and billing upgrades",
+                "admin": "System-wide metrics and user tier management (restricted to admin users)"
+            }
+        }
 
     @app.get("/health", tags=["system"])
     def health() -> dict[str, str]:

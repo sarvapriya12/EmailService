@@ -4,25 +4,36 @@ from services.database import _get_client
 logger = logging.getLogger(__name__)
 
 
-def get_or_create_ticket(sender_email: str, subject: str, user_id: str) -> dict:
+def get_or_create_ticket(sender_email: str, subject: str, user_id: str, category: str | None = None) -> dict:
     try:
         # Check for existing open ticket from this sender
         response = _get_client().table("tickets").select(
-            "id, status, subject, created_at"
+            "id, status, subject, category, created_at"
         ).eq("sender_email", sender_email).eq(
             "user_id", user_id
         ).in_("status", ["open", "in_progress"]).execute()
 
         if response.data:
-            return {"ticket": response.data[0], "created": False}
+            ticket = response.data[0]
+            # Update category if it was missing and we have one now
+            if category and not ticket.get("category"):
+                _get_client().table("tickets").update(
+                    {"category": category}
+                ).eq("id", ticket["id"]).execute()
+                ticket["category"] = category
+            return {"ticket": ticket, "created": False}
 
         # Create new ticket
-        insert_response = _get_client().table("tickets").insert({
+        insert_data = {
             "user_id": user_id,
             "sender_email": sender_email,
             "subject": subject,
             "status": "open",
-        }).execute()
+        }
+        if category:
+            insert_data["category"] = category
+
+        insert_response = _get_client().table("tickets").insert(insert_data).execute()
 
         return {"ticket": insert_response.data[0], "created": True}
 
@@ -53,7 +64,7 @@ def add_message(
 def get_tickets(user_id: str) -> list:
     try:
         response = _get_client().table("tickets").select(
-            "id, sender_email, subject, status, created_at, resolved_at"
+            "id, sender_email, subject, status, category, resolution, created_at, resolved_at"
         ).eq("user_id", user_id).order("created_at", desc=True).execute()
         return response.data or []
     except Exception as exc:
@@ -120,9 +131,12 @@ def get_ticket(ticket_id: str) -> dict | None:
         return None
 
 
-def update_ticket_status(ticket_id: str, status: str) -> dict:
+def update_ticket_status(ticket_id: str, status: str, resolution: str | None = None) -> dict:
     try:
         update_data: dict = {"status": status}
+
+        if resolution:
+            update_data["resolution"] = resolution
 
         if status in ("resolved", "closed"):
             update_data["resolved_at"] = "now()"
