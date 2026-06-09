@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 def get_or_create_settings(user_id: str) -> dict:
     try:
         response = _get_client().table("user_settings").select(
-            "user_id, review_mode, created_at, updated_at"
+            "user_id, review_mode, is_admin, created_at, updated_at"
         ).eq("user_id", user_id).execute()
 
         if response.data:
