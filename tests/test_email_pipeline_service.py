@@ -1,3 +1,4 @@
+from unittest.mock import patch
 from services.email_pipeline_service import EmailPipelineService
 
 
@@ -26,7 +27,8 @@ class StubGmailService:
 		return {"status": "sent", "to_email": to_email}
 
 
-def test_email_pipeline_processes_email_and_sends_reply() -> None:
+@patch("services.email_pipeline_service.is_sender_allowed", return_value=True)
+def test_email_pipeline_processes_email_and_sends_reply(mock_is_sender_allowed) -> None:
 	router = StubRouter(
 		[
 			"billing - invoice question",
