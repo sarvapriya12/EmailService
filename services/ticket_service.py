@@ -75,7 +75,44 @@ def get_ticket(ticket_id: str) -> dict | None:
         ).eq("ticket_id", ticket_id).order("created_at").execute()
 
         ticket = ticket_response.data[0]
-        ticket["messages"] = messages_response.data or []
+        messages = messages_response.data or []
+
+        # Query approval_queue for all entries for this ticket
+        try:
+            queue_response = _get_client().table("approval_queue").select(
+                "id, reply_subject, original_reply_body, edited_reply_body, status, created_at, acted_at"
+            ).eq("ticket_id", ticket_id).execute()
+            
+            queue_items = queue_response.data or []
+            
+            # Find any pending reply
+            pending_reply = next((q for q in queue_items if q["status"] == "pending"), None)
+            ticket["pending_reply"] = pending_reply
+            
+            # Find approved or edited_and_sent replies to backfill outbound messages
+            # only if there isn't already an outbound message in `ticket_messages`
+            has_outbound = any(m["direction"] == "outbound" for m in messages)
+            
+            if not has_outbound:
+                for q in queue_items:
+                    if q["status"] in ("approved", "edited_and_sent"):
+                        body = q["edited_reply_body"] if q["status"] == "edited_and_sent" else q["original_reply_body"]
+                        messages.append({
+                            "id": q["id"],
+                            "direction": "outbound",
+                            "body": body,
+                            "gmail_message_id": None,
+                            "created_at": q["acted_at"] or q["created_at"]
+                        })
+            
+            # Sort messages chronologically
+            messages.sort(key=lambda m: m.get("created_at") or "")
+            
+        except Exception as q_exc:
+            logger.warning("Failed to check approval queue for ticket %s: %s", ticket_id, q_exc)
+            ticket["pending_reply"] = None
+
+        ticket["messages"] = messages
         return ticket
 
     except Exception as exc:

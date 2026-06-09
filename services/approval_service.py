@@ -52,7 +52,7 @@ def get_pending(user_id: str) -> list:
 def approve(queue_id: str) -> dict:
     try:
         item_response = _get_client().table("approval_queue").select(
-            "sender_email, reply_subject, original_reply_body"
+            "ticket_id, sender_email, reply_subject, original_reply_body"
         ).eq("id", queue_id).execute()
 
         if not item_response.data:
@@ -70,6 +70,16 @@ def approve(queue_id: str) -> dict:
             "status": "approved",
             "acted_at": "now()",
         }).eq("id", queue_id).execute()
+
+        # Add message to history and resolve ticket
+        if item.get("ticket_id"):
+            from services.ticket_service import add_message, update_ticket_status
+            add_message(
+                ticket_id=item["ticket_id"],
+                direction="outbound",
+                body=item["original_reply_body"],
+            )
+            update_ticket_status(item["ticket_id"], "resolved")
 
         return {"status": "approved", "gmail_status": send_result.get("status")}
 
@@ -93,7 +103,7 @@ def reject(queue_id: str) -> dict:
 def edit_and_send(queue_id: str, edited_body: str) -> dict:
     try:
         item_response = _get_client().table("approval_queue").select(
-            "sender_email, reply_subject"
+            "ticket_id, sender_email, reply_subject"
         ).eq("id", queue_id).execute()
 
         if not item_response.data:
@@ -112,6 +122,16 @@ def edit_and_send(queue_id: str, edited_body: str) -> dict:
             "edited_reply_body": edited_body,
             "acted_at": "now()",
         }).eq("id", queue_id).execute()
+
+        # Add message to history and resolve ticket
+        if item.get("ticket_id"):
+            from services.ticket_service import add_message, update_ticket_status
+            add_message(
+                ticket_id=item["ticket_id"],
+                direction="outbound",
+                body=edited_body,
+            )
+            update_ticket_status(item["ticket_id"], "resolved")
 
         return {"status": "edited_and_sent", "gmail_status": send_result.get("status")}
 
