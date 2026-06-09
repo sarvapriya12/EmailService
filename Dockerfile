@@ -13,4 +13,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "-c", "celery -A celery_app worker --loglevel=info --detach && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]
