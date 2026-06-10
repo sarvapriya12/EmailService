@@ -2,7 +2,7 @@ import logging
 from celery_app import celery_app
 from services.email_pipeline_service import EmailPipelineService
 from services.database import mark_as_processed
-from services.subscription_service import increment_usage
+from services.subscription_service import check_quota, increment_usage
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,14 @@ def process_email_background_task(self, user_id: str, payload: dict):
     try:
         logger.info("Starting background email processing for user: %s", user_id)
         
+        # Enforce quota check before processing email
+        if not check_quota(user_id):
+            logger.info("User %s is over quota — skipping email processing", user_id)
+            idempotency_key = payload.get("idempotency_key")
+            if idempotency_key:
+                mark_as_processed(idempotency_key=idempotency_key, status="filtered")
+            return {"status": "over_quota", "user_id": user_id}
+
         pipeline = EmailPipelineService(user_id=user_id)
         processing_result = pipeline.process_incoming_email(
             sender_email=payload.get("sender_email"),
@@ -31,7 +39,9 @@ def process_email_background_task(self, user_id: str, payload: dict):
                 status="done" if processing_result.success else "filtered",
             )
             
-        increment_usage(user_id)
+        # Only increment usage if an actual auto-reply was sent or queued for review
+        if processing_result.success and processing_result.gmail_status in ("sent", "queued_for_review"):
+            increment_usage(user_id)
         
         return {"status": "success", "user_id": user_id}
     except Exception as e:

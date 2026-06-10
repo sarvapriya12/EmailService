@@ -201,3 +201,18 @@ def subscription_status(
     from services.subscription_service import get_subscription_info
     user_id = current_user["user_id"]
     return get_subscription_info(user_id)
+
+
+from pydantic import BaseModel
+
+class SubscriptionUpgradeRequest(BaseModel):
+    tier: str
+
+@router.post("/subscription/upgrade")
+def upgrade_user_subscription(
+    body: SubscriptionUpgradeRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    from services.subscription_service import upgrade_subscription
+    user_id = current_user["user_id"]
+    return upgrade_subscription(user_id, body.tier)

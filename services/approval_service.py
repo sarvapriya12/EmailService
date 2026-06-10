@@ -59,7 +59,12 @@ def approve(queue_id: str) -> dict:
             return {"status": "failed", "error": "Queue item not found"}
 
         item = item_response.data[0]
-        gmail = GmailService()
+        user_id = None
+        if item.get("ticket_id"):
+            ticket_res = _get_client().table("tickets").select("user_id").eq("id", item["ticket_id"]).execute()
+            if ticket_res.data:
+                user_id = ticket_res.data[0].get("user_id")
+        gmail = GmailService(user_id=user_id)
         send_result = gmail.send_reply(
             to_email=item["sender_email"],
             subject=item["reply_subject"],
@@ -121,7 +126,12 @@ def edit_and_send(queue_id: str, edited_body: str) -> dict:
             return {"status": "failed", "error": "Queue item not found"}
 
         item = item_response.data[0]
-        gmail = GmailService()
+        user_id = None
+        if item.get("ticket_id"):
+            ticket_res = _get_client().table("tickets").select("user_id").eq("id", item["ticket_id"]).execute()
+            if ticket_res.data:
+                user_id = ticket_res.data[0].get("user_id")
+        gmail = GmailService(user_id=user_id)
         send_result = gmail.send_reply(
             to_email=item["sender_email"],
             subject=item["reply_subject"],

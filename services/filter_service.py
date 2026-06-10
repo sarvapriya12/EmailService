@@ -35,6 +35,21 @@ def is_sender_allowed(sender_email: str) -> bool:
         return True  # Fail open — allow on DB error
 
 
+def is_sender_whitelisted(sender_email: str) -> bool:
+    try:
+        response = _get_client().table("email_filters").select("type, pattern").execute()
+        filters = response.data or []
+        whitelist = [f["pattern"] for f in filters if f["type"] == "whitelist"]
+
+        for pattern in whitelist:
+            if fnmatch.fnmatch(sender_email.lower(), pattern.lower()):
+                return True
+        return False
+    except Exception as exc:
+        logger.error("is_sender_whitelisted failed: %s", exc)
+        return False
+
+
 def add_filter(user_id: str, filter_type: str, pattern: str) -> dict:
     try:
         response = _get_client().table("email_filters").insert({

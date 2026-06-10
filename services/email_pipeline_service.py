@@ -8,7 +8,7 @@ from services.extractor import EmailExtractor
 from services.gmail_service import GmailService
 from services.llm_router import LLMRouter
 from services.ticket_service import get_or_create_ticket, add_message, update_ticket_status
-from services.filter_service import is_sender_allowed
+from services.filter_service import is_sender_allowed, is_sender_whitelisted
 from services.approval_service import queue_reply
 from services.settings_service import is_review_mode_enabled
 from services.business_service import get_active_config
@@ -130,7 +130,11 @@ class EmailPipelineService:
                     )
 
         # Step 4 — Review mode check
-        if self.user_id and is_review_mode_enabled(self.user_id):
+        is_whitelisted = is_sender_whitelisted(sender_email)
+        if is_whitelisted:
+            logger.info("Sender %s is whitelisted — bypassing review mode", sender_email)
+
+        if self.user_id and is_review_mode_enabled(self.user_id) and not is_whitelisted:
             logger.info("Review mode ON — queuing reply for approval")
             queue_reply(
                 ticket_id=ticket_id,
