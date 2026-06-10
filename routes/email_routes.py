@@ -24,8 +24,15 @@ RECENT_HISTORY_IDS: dict[str, float] = {}
 RECENT_MESSAGE_IDS: dict[str, float] = {}
 _CACHE_LOCK = threading.Lock()
 
+
+# Simple in-memory debounce function to prevent processing the
+#  same history_id or message_id multiple times within a short window.
 def _is_recently_seen(id_str: str, cache: dict[str, float], ttl: int = 60) -> bool:
     now = time.time()
+
+    # Use a lock to ensure thread safety when accessing the cache
+    # This is important because FastAPI can run multiple requests in parallel,
+    #  and we want to avoid race conditions when checking and updating the cache.
     with _CACHE_LOCK:
         if id_str in cache and (now - cache[id_str] < ttl):
             return True
@@ -37,6 +44,7 @@ def _is_recently_seen(id_str: str, cache: dict[str, float], ttl: int = 60) -> bo
             if len(cache) > 1000:
                 cache.clear()
         return False
+
 
 @router.post("/process-email")
 def process_email(

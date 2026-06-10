@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +27,23 @@ class Settings(BaseSettings):
     SUPABASE_URL: Optional[str] = None
     SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
+
+
+
+    ALLOWED_ORIGINS: str = ""
+
+    @property
+    def allowed_origins(self) -> List[str]:
+        return [
+            origin.strip()
+            for origin in self.ALLOWED_ORIGINS.split(",")
+            if origin.strip()
+        ]
+
+    class Config:
+        env_file = ".env"
+
+
 
     @property
     def CLASSIFY_MODELS(self) -> list[str]:

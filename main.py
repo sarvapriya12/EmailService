@@ -1,9 +1,10 @@
 import logging
-import os
+
 from contextlib import asynccontextmanager
-import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from Backend.config import settings
 from routes import system_routes
 from routes.auth_routes import router as auth_router
 from routes.business_routes import router as business_router
@@ -15,8 +16,7 @@ from routes.queue_routes import router as queue_router
 from routes.settings_routes import router as settings_router
 from routes.gmail_oauth_routes import router as gmail_oauth_router
 from routes.admin_routes import router as admin_router
-import logging
-
+from config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
+        allow_origins=settings.allowed_origins or ["http://localhost:3000"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
