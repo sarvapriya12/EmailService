@@ -52,10 +52,26 @@ def is_sender_whitelisted(sender_email: str) -> bool:
 
 def add_filter(user_id: str, filter_type: str, pattern: str) -> dict:
     try:
-        response = _get_client().table("email_filters").insert({
+        supabase = _get_client()
+        pattern_lower = pattern.strip().lower()
+
+        # Fetch existing filters for the tenant to ensure no duplicates or cross-list conflicts
+        existing_res = supabase.table("email_filters").select("type, pattern").eq("user_id", user_id).execute()
+        existing_filters = existing_res.data or []
+
+        for f in existing_filters:
+            existing_pattern = f.get("pattern", "").strip().lower()
+            if existing_pattern == pattern_lower:
+                if f.get("type") == filter_type:
+                    return {"status": "failed", "error": f"Pattern '{pattern}' is already in your {filter_type}."}
+                else:
+                    opposite = "blacklist" if filter_type == "whitelist" else "whitelist"
+                    return {"status": "failed", "error": f"Pattern '{pattern}' is already in your {opposite}. A pattern cannot be in both lists simultaneously."}
+
+        response = supabase.table("email_filters").insert({
             "user_id": user_id,
             "type": filter_type,
-            "pattern": pattern.lower(),
+            "pattern": pattern_lower,
         }).execute()
         return {"status": "created", "filter": response.data[0] if response.data else {}}
     except Exception as exc:

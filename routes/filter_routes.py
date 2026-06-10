@@ -25,11 +25,16 @@ def create_filter(
     if not pattern:
         raise HTTPException(status_code=400, detail="Pattern is required")
 
-    return add_filter(
+    result = add_filter(
         user_id=current_user["user_id"],
         filter_type=filter_type,
         pattern=pattern,
     )
+
+    if result.get("status") == "failed":
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed to create filter"))
+
+    return result
 
 
 @router.delete("/{filter_id}")
