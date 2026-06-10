@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from services.auth_guard import get_current_user
-from services.approval_service import get_pending, approve, reject, edit_and_send
+from services.approval_service import get_pending, approve, reject, edit_and_send, update_draft
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/queue", tags=["queue"])
@@ -38,3 +38,15 @@ def edit_reply(
     if not edited_body:
         raise HTTPException(status_code=400, detail="Body is required")
     return edit_and_send(queue_id=queue_id, edited_body=edited_body)
+
+
+@router.post("/{queue_id}/draft")
+def save_draft_reply(
+    queue_id: str,
+    body: dict,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    draft_body = body.get("body")
+    if not draft_body:
+        raise HTTPException(status_code=400, detail="Body is required")
+    return update_draft(queue_id=queue_id, draft_body=draft_body)
