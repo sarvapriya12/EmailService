@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from Backend.config import settings
 from routes import system_routes
 from routes.auth_routes import router as auth_router
 from routes.business_routes import router as business_router

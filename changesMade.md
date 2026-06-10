@@ -90,3 +90,9 @@ To make the system safe for multi-worker deployments (e.g., Gunicorn/Uvicorn wit
 
 ### 19. Strict OAuth Encryption Key Enforcement
 To prevent the ephemeral key risk (where a server restart would generate a new fallback key and permanently invalidate all stored OAuth refresh tokens in the database), `services/gmail_oauth_service.py` was updated to strictly require `OAUTH_ENCRYPTION_KEY` in the environment variables on startup. The CI pipeline was also updated to supply a dummy key to pass sanity checks safely.
+
+### 20. CI/CD Import Issue Fix & Duplicate Import Removal
+Removed the duplicate `from Backend.config import settings` import from [main.py](file:///D:/machine%20learning/LangchainEmailServiceProject/Backend/main.py), leaving only the correct relative import `from config.settings import settings`. This resolves the `ModuleNotFoundError: No module named 'Backend'` crash in the GitHub Actions runner (where the backend contents are checked out directly at the root of the runner's workspace).
+
+### 21. Pydantic v2 Configuration Conflict Fix
+Removed the obsolete `class Config` block from [config/settings.py](file:///D:/machine%20learning/LangchainEmailServiceProject/Backend/config/settings.py). Because Pydantic v2 model settings are already configured via `model_config = SettingsConfigDict(...)`, having both `Config` and `model_config` defined on the same `BaseSettings` subclass raised a `PydanticUserError` on startup. This ensures the backend starts up cleanly under Pydantic v2.

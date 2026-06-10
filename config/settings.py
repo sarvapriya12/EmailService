@@ -40,9 +40,6 @@ class Settings(BaseSettings):
             if origin.strip()
         ]
 
-    class Config:
-        env_file = ".env"
-
 
 
     @property
