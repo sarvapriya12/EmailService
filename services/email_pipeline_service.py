@@ -7,7 +7,7 @@ from services.email_generator import EmailGenerator
 from services.extractor import EmailExtractor
 from services.gmail_service import GmailService
 from services.llm_router import LLMRouter
-from services.ticket_service import get_or_create_ticket, add_message, update_ticket_status
+from services.ticket_service import get_or_create_ticket, add_message, update_ticket_status, parse_utc_datetime
 from services.filter_service import is_sender_allowed, is_sender_whitelisted
 from services.approval_service import queue_reply
 from services.settings_service import is_review_mode_enabled
@@ -117,9 +117,9 @@ class EmailPipelineService:
                 # (to consider it as an extension of the same problem and skip auto-reply)
                 has_recent_ticket = False
                 if ticket_result.get("created"):
-                    from datetime import datetime, timedelta
+                    from datetime import timedelta
                     try:
-                        current_created_at = datetime.fromisoformat(ticket["created_at"].replace("Z", "+00:00"))
+                        current_created_at = parse_utc_datetime(ticket["created_at"])
                         from services.database import _get_client
                         recent_res = _get_client().table("tickets").select("id, created_at").eq(
                             "sender_email", sender_email
@@ -127,9 +127,10 @@ class EmailPipelineService:
 
                         if recent_res.data:
                             latest_prev = recent_res.data[0]
-                            prev_created_at = datetime.fromisoformat(latest_prev["created_at"].replace("Z", "+00:00"))
-                            if timedelta(seconds=0) < current_created_at - prev_created_at <= timedelta(hours=24):
-                                has_recent_ticket = True
+                            prev_created_at = parse_utc_datetime(latest_prev["created_at"])
+                            if current_created_at and prev_created_at:
+                                if timedelta(seconds=0) < current_created_at - prev_created_at <= timedelta(hours=24):
+                                    has_recent_ticket = True
                     except Exception as exc:
                         logger.warning("Failed to check for recent ticket in pipeline: %s", exc)
 

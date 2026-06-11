@@ -4,6 +4,22 @@ from services.database import _get_client
 logger = logging.getLogger(__name__)
 
 
+def parse_utc_datetime(dt_str: str):
+    if not dt_str:
+        return None
+    try:
+        from datetime import datetime, timezone
+        if dt_str.endswith("Z"):
+            dt_str = dt_str[:-1] + "+00:00"
+        dt = datetime.fromisoformat(dt_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception as e:
+        logger.warning("Failed to parse datetime %s: %s", dt_str, e)
+        return None
+
+
 def normalize_subject(subj: str) -> str:
     if not subj:
         return ""
@@ -124,7 +140,7 @@ def get_tickets(user_id: str) -> list:
 def get_ticket(ticket_id: str) -> dict | None:
     try:
         ticket_response = _get_client().table("tickets").select(
-            "id, sender_email, subject, status, created_at, resolved_at"
+            "id, user_id, sender_email, subject, status, created_at, resolved_at"
         ).eq("id", ticket_id).execute()
 
         if not ticket_response.data:
@@ -175,9 +191,9 @@ def get_ticket(ticket_id: str) -> dict | None:
         # Check for previous ticket from this sender within 24 hours of current ticket's created_at
         current_created_at_str = ticket.get("created_at")
         if current_created_at_str:
-            from datetime import datetime, timedelta
+            from datetime import timedelta
             try:
-                current_created_at = datetime.fromisoformat(current_created_at_str.replace("Z", "+00:00"))
+                current_created_at = parse_utc_datetime(current_created_at_str)
                 
                 # Query all tickets from this sender
                 prev_tickets_res = _get_client().table("tickets").select(
@@ -189,17 +205,18 @@ def get_ticket(ticket_id: str) -> dict | None:
                 for prev_t in prev_tickets_res.data or []:
                     prev_created_at_str = prev_t.get("created_at")
                     if prev_created_at_str:
-                        prev_created_at = datetime.fromisoformat(prev_created_at_str.replace("Z", "+00:00"))
-                        time_diff = current_created_at - prev_created_at
-                        if timedelta(seconds=0) < time_diff <= timedelta(hours=24):
-                            # Fetch the messages of that previous ticket
-                            prev_msgs_res = _get_client().table("ticket_messages").select(
-                                "id, direction, body, gmail_message_id, created_at"
-                            ).eq("ticket_id", prev_t["id"]).order("created_at").execute()
-                            
-                            prev_t["messages"] = prev_msgs_res.data or []
-                            ticket["previous_ticket"] = prev_t
-                            break
+                        prev_created_at = parse_utc_datetime(prev_created_at_str)
+                        if current_created_at and prev_created_at:
+                            time_diff = current_created_at - prev_created_at
+                            if timedelta(seconds=0) < time_diff <= timedelta(hours=24):
+                                # Fetch the messages of that previous ticket
+                                prev_msgs_res = _get_client().table("ticket_messages").select(
+                                    "id, direction, body, gmail_message_id, created_at"
+                                ).eq("ticket_id", prev_t["id"]).order("created_at").execute()
+                                
+                                prev_t["messages"] = prev_msgs_res.data or []
+                                ticket["previous_ticket"] = prev_t
+                                break
             except Exception as parse_exc:
                 logger.warning("Failed to check for previous ticket: %s", parse_exc)
 
