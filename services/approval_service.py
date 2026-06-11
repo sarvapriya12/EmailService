@@ -43,7 +43,21 @@ def get_pending(user_id: str) -> list:
             "status", "pending"
         ).order("created_at").execute()
 
-        return response.data or []
+        queue_items = response.data or []
+        for item in queue_items:
+            t_id = item.get("ticket_id")
+            if t_id:
+                msg_res = _get_client().table("ticket_messages").select("body").eq(
+                    "ticket_id", t_id
+                ).eq("direction", "inbound").order("created_at", desc=True).limit(1).execute()
+                if msg_res.data:
+                    item["original_body"] = msg_res.data[0]["body"]
+                else:
+                    item["original_body"] = "No inbound email body found."
+            else:
+                item["original_body"] = "No ticket ID associated."
+
+        return queue_items
     except Exception as exc:
         logger.error("get_pending failed: %s", exc)
         return []
