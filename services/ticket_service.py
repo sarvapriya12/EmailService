@@ -275,7 +275,7 @@ def send_manual_reply(ticket_id: str, body: str) -> dict:
         return {"status": "failed", "error": str(exc)}
 
 
-def generate_ticket_reply(ticket_id: str) -> dict:
+def generate_ticket_reply(ticket_id: str, instructions: str | None = None) -> dict:
     try:
         # Get ticket with messages
         ticket = get_ticket(ticket_id)
@@ -300,8 +300,16 @@ def generate_ticket_reply(ticket_id: str) -> dict:
             "based on the following thread history. Do not invent details. Keep the tone professional, helpful, and concise.\n\n"
             "Thread History:\n"
             f"{history_str}\n\n"
-            "Reply:"
         )
+
+        if instructions and instructions.strip():
+            prompt += (
+                "IMPORTANT: The support agent has provided the following specific instructions or bullet points for the reply. "
+                "You MUST incorporate this information/guidance into your response:\n"
+                f"Instructions: {instructions.strip()}\n\n"
+            )
+
+        prompt += "Reply:"
 
         from services.llm_router import build_generate_pool
         router = build_generate_pool()

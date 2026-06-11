@@ -1,6 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from services.auth_guard import get_current_user
+from typing import Optional
 from services.ticket_service import (
     get_tickets,
     get_ticket,
@@ -16,6 +17,10 @@ router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 class ReplyRequest(BaseModel):
     body: str
+
+
+class GenerateReplyRequest(BaseModel):
+    instructions: Optional[str] = None
 
 
 @router.get("")
@@ -64,9 +69,11 @@ def reply_to_ticket(
 @router.post("/{ticket_id}/generate-reply")
 def generate_reply_for_ticket(
     ticket_id: str,
+    body: Optional[GenerateReplyRequest] = None,
     current_user: dict = Depends(get_current_user),
 ) -> dict:
-    result = generate_ticket_reply(ticket_id=ticket_id)
+    instructions = body.instructions if body else None
+    result = generate_ticket_reply(ticket_id=ticket_id, instructions=instructions)
     if result.get("status") == "failed":
         raise HTTPException(
             status_code=500,
