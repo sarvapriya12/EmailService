@@ -127,3 +127,60 @@ def test_fetch_latest_message_since_returns_parsed_message() -> None:
 	assert result["sender_email"] == "support@example.com"
 	assert result["subject"] == "Need help"
 	assert result["body"] == "Hello from Gmail"
+
+
+def test_fetch_messages_since_returns_all_parsed_messages() -> None:
+	history_response = {
+		"history": [
+			{
+				"messagesAdded": [
+					{"message": {"id": "message-123", "threadId": "thread-456"}},
+					{"message": {"id": "message-123", "threadId": "thread-456"}},  # duplicate in history
+					{"message": {"id": "message-789", "threadId": "thread-012"}},
+				]
+			}
+		]
+	}
+	msg1_response = {
+		"id": "message-123",
+		"threadId": "thread-456",
+		"payload": {
+			"headers": [
+				{"name": "From", "value": "Support Team <support@example.com>"},
+				{"name": "Subject", "value": "Need help"},
+			],
+			"body": {"data": base64.urlsafe_b64encode(b"Hello from Gmail").decode("utf-8")},
+		},
+	}
+	msg2_response = {
+		"id": "message-789",
+		"threadId": "thread-012",
+		"payload": {
+			"headers": [
+				{"name": "From", "value": "Sales Team <sales@example.com>"},
+				{"name": "Subject", "value": "Pricing inquiry"},
+			],
+			"body": {"data": base64.urlsafe_b64encode(b"What are the rates?").decode("utf-8")},
+		},
+	}
+	gmail_service = GmailService.__new__(GmailService)
+	gmail_service.service = StubGmailApi(
+		history_response,
+		{"message-123": msg1_response, "message-789": msg2_response}
+	)
+
+	result = gmail_service.fetch_messages_since("history-000")
+
+	assert len(result) == 2
+
+	# Verify first message (deduplicated)
+	assert result[0]["message_id"] == "message-123"
+	assert result[0]["sender_email"] == "support@example.com"
+	assert result[0]["subject"] == "Need help"
+	assert result[0]["body"] == "Hello from Gmail"
+
+	# Verify second message
+	assert result[1]["message_id"] == "message-789"
+	assert result[1]["sender_email"] == "sales@example.com"
+	assert result[1]["subject"] == "Pricing inquiry"
+	assert result[1]["body"] == "What are the rates?"

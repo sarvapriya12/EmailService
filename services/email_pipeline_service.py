@@ -113,10 +113,30 @@ class EmailPipelineService:
                     gmail_message_id=gmail_message_id,
                 )
 
-                # If ticket already existed — don't send auto-reply
-                if not ticket_result.get("created"):
+                # Also, check if there is another ticket from this sender within 24 hours
+                # (to consider it as an extension of the same problem and skip auto-reply)
+                has_recent_ticket = False
+                if ticket_result.get("created"):
+                    from datetime import datetime, timedelta
+                    try:
+                        current_created_at = datetime.fromisoformat(ticket["created_at"].replace("Z", "+00:00"))
+                        from services.database import _get_client
+                        recent_res = _get_client().table("tickets").select("id, created_at").eq(
+                            "sender_email", sender_email
+                        ).eq("user_id", self.user_id).neq("id", ticket_id).order("created_at", desc=True).execute()
+
+                        if recent_res.data:
+                            latest_prev = recent_res.data[0]
+                            prev_created_at = datetime.fromisoformat(latest_prev["created_at"].replace("Z", "+00:00"))
+                            if timedelta(seconds=0) < current_created_at - prev_created_at <= timedelta(hours=24):
+                                has_recent_ticket = True
+                    except Exception as exc:
+                        logger.warning("Failed to check for recent ticket in pipeline: %s", exc)
+
+                # If ticket already existed or is a recent extension — don't send auto-reply
+                if not ticket_result.get("created") or has_recent_ticket:
                     logger.info(
-                        "Existing ticket %s for sender %s — skipping auto-reply",
+                        "Existing or extension ticket %s for sender %s — skipping auto-reply",
                         ticket_id,
                         sender_email,
                     )

@@ -179,36 +179,68 @@ class GmailService:
             logger.error("Gmail watch setup failed: %s", exc)
             return {"status": "failed", "error": str(exc)}
 
+    def fetch_messages_since(self, history_id: str) -> list[dict[str, Any]]:
+        """Fetches all messages added since the given history_id."""
+        message_ids = self._collect_message_ids_since(history_id)
+
+        if not message_ids:
+            logger.info("No new messages for history_id=%s — skipping", history_id)
+            return []
+
+        # Deduplicate message_ids while preserving order
+        seen_ids = set()
+        unique_message_ids = []
+        for msg_id in message_ids:
+            if msg_id not in seen_ids:
+                seen_ids.add(msg_id)
+                unique_message_ids.append(msg_id)
+
+        fetched_messages = []
+        for msg_id in unique_message_ids:
+            try:
+                message = self.service.users().messages().get(
+                    userId="me",
+                    id=msg_id,
+                    format="full",
+                ).execute()
+                parsed_message = self.parse_message(message)
+
+                fetched_messages.append({
+                    "message_id": parsed_message["message_id"],
+                    "thread_id": parsed_message["thread_id"],
+                    "sender_email": parsed_message["sender_email"],
+                    "from_header": parsed_message["from_header"],
+                    "subject": parsed_message["subject"],
+                    "body": parsed_message["body"],
+                    "raw_message": message,
+                })
+            except Exception as exc:
+                logger.error("Failed to fetch individual Gmail message id=%s: %s", msg_id, exc)
+
+        return fetched_messages
+
     def fetch_latest_message_since(self, history_id: str) -> dict[str, object]:
         try:
-            message_ids = self._collect_message_ids_since(history_id)
+            messages = self.fetch_messages_since(history_id)
 
-            if not message_ids:
+            if not messages:
                 logger.info("No new messages for history_id=%s — skipping", history_id)
                 return {
                     "status": "no_new_messages",
                     "error": "No new Gmail messages were found for the supplied history ID",
                 }
 
-            latest_message_id = message_ids[-1]
-            message = self.service.users().messages().get(
-                userId="me",
-                id=latest_message_id,
-                format="full",
-            ).execute()
-
-            parsed_message = self.parse_message(message)
-
+            latest_msg = messages[-1]
             return {
                 "status": "message_fetched",
                 "history_id": history_id,
-                "message_id": parsed_message["message_id"],
-                "thread_id": parsed_message["thread_id"],
-                "sender_email": parsed_message["sender_email"],
-                "from_header": parsed_message["from_header"],
-                "subject": parsed_message["subject"],
-                "body": parsed_message["body"],
-                "raw_message": message,
+                "message_id": latest_msg["message_id"],
+                "thread_id": latest_msg["thread_id"],
+                "sender_email": latest_msg["sender_email"],
+                "from_header": latest_msg["from_header"],
+                "subject": latest_msg["subject"],
+                "body": latest_msg["body"],
+                "raw_message": latest_msg["raw_message"],
             }
         except Exception as exc:
             logger.error("Failed to fetch Gmail message from history: %s", exc)

@@ -4,24 +4,73 @@ from services.database import _get_client
 logger = logging.getLogger(__name__)
 
 
+def normalize_subject(subj: str) -> str:
+    if not subj:
+        return ""
+    subj = subj.strip()
+    # Strip common prefixes case-insensitively
+    lower = subj.lower()
+    while lower.startswith("re:") or lower.startswith("fwd:") or lower.startswith("fw:") or lower.startswith("re :") or lower.startswith("fwd :") or lower.startswith("fw :"):
+        if lower.startswith("re:"):
+            subj = subj[3:]
+        elif lower.startswith("fwd:"):
+            subj = subj[4:]
+        elif lower.startswith("fw:"):
+            subj = subj[3:]
+        elif lower.startswith("re :"):
+            subj = subj[4:]
+        elif lower.startswith("fwd :"):
+            subj = subj[5:]
+        elif lower.startswith("fw :"):
+            subj = subj[4:]
+        subj = subj.strip()
+        lower = subj.lower()
+    return subj
+
+
 def get_or_create_ticket(sender_email: str, subject: str, user_id: str, category: str | None = None) -> dict:
     try:
-        # Check for existing open ticket from this sender
+        # Check for any ticket from this sender
         response = _get_client().table("tickets").select(
             "id, status, subject, category, created_at"
         ).eq("sender_email", sender_email).eq(
             "user_id", user_id
-        ).in_("status", ["open", "in_progress"]).execute()
+        ).execute()
 
-        if response.data:
-            ticket = response.data[0]
+        # Try to find a matching ticket using normalized subjects
+        target_normalized = normalize_subject(subject).lower()
+        matched_ticket = None
+
+        # 1. First search for open or in_progress tickets (higher priority to keep them grouped there)
+        for ticket in response.data or []:
+            if ticket["status"] in ("open", "in_progress"):
+                if normalize_subject(ticket.get("subject", "")).lower() == target_normalized:
+                    matched_ticket = ticket
+                    break
+
+        # 2. If no open/in-progress ticket found, search for resolved/closed tickets to reopen
+        if not matched_ticket:
+            for ticket in response.data or []:
+                if ticket["status"] in ("resolved", "closed"):
+                    if normalize_subject(ticket.get("subject", "")).lower() == target_normalized:
+                        matched_ticket = ticket
+                        # Reopen the ticket
+                        _get_client().table("tickets").update({
+                            "status": "open",
+                            "resolved_at": None,
+                            "resolution": None
+                        }).eq("id", ticket["id"]).execute()
+                        matched_ticket["status"] = "open"
+                        break
+
+        if matched_ticket:
             # Update category if it was missing and we have one now
-            if category and not ticket.get("category"):
+            if category and not matched_ticket.get("category"):
                 _get_client().table("tickets").update(
                     {"category": category}
-                ).eq("id", ticket["id"]).execute()
-                ticket["category"] = category
-            return {"ticket": ticket, "created": False}
+                ).eq("id", matched_ticket["id"]).execute()
+                matched_ticket["category"] = category
+            return {"ticket": matched_ticket, "created": False}
 
         # Create new ticket
         insert_data = {
@@ -123,6 +172,37 @@ def get_ticket(ticket_id: str) -> dict | None:
             logger.warning("Failed to check approval queue for ticket %s: %s", ticket_id, q_exc)
             ticket["pending_reply"] = None
 
+        # Check for previous ticket from this sender within 24 hours of current ticket's created_at
+        current_created_at_str = ticket.get("created_at")
+        if current_created_at_str:
+            from datetime import datetime, timedelta
+            try:
+                current_created_at = datetime.fromisoformat(current_created_at_str.replace("Z", "+00:00"))
+                
+                # Query all tickets from this sender
+                prev_tickets_res = _get_client().table("tickets").select(
+                    "id, subject, status, created_at"
+                ).eq("sender_email", ticket["sender_email"]).eq(
+                    "user_id", ticket["user_id"]
+                ).neq("id", ticket_id).order("created_at", desc=True).execute()
+                
+                for prev_t in prev_tickets_res.data or []:
+                    prev_created_at_str = prev_t.get("created_at")
+                    if prev_created_at_str:
+                        prev_created_at = datetime.fromisoformat(prev_created_at_str.replace("Z", "+00:00"))
+                        time_diff = current_created_at - prev_created_at
+                        if timedelta(seconds=0) < time_diff <= timedelta(hours=24):
+                            # Fetch the messages of that previous ticket
+                            prev_msgs_res = _get_client().table("ticket_messages").select(
+                                "id, direction, body, gmail_message_id, created_at"
+                            ).eq("ticket_id", prev_t["id"]).order("created_at").execute()
+                            
+                            prev_t["messages"] = prev_msgs_res.data or []
+                            ticket["previous_ticket"] = prev_t
+                            break
+            except Exception as parse_exc:
+                logger.warning("Failed to check for previous ticket: %s", parse_exc)
+
         ticket["messages"] = messages
         return ticket
 
@@ -148,4 +228,89 @@ def update_ticket_status(ticket_id: str, status: str, resolution: str | None = N
         return {"status": "updated"}
     except Exception as exc:
         logger.error("update_ticket_status failed: %s", exc)
+        return {"status": "failed", "error": str(exc)}
+
+
+def send_manual_reply(ticket_id: str, body: str) -> dict:
+    try:
+        # Fetch ticket
+        ticket_res = _get_client().table("tickets").select(
+            "user_id, sender_email, subject"
+        ).eq("id", ticket_id).execute()
+
+        if not ticket_res.data:
+            return {"status": "failed", "error": "Ticket not found"}
+
+        ticket = ticket_res.data[0]
+        user_id = ticket["user_id"]
+        sender_email = ticket["sender_email"]
+        subject = ticket["subject"]
+
+        # Ensure subject starts with "Re:" if not already
+        if not subject.lower().startswith("re:"):
+            subject = f"Re: {subject}"
+
+        # Send via Gmail
+        from services.gmail_service import GmailService
+        gmail = GmailService(user_id=user_id)
+        send_result = gmail.send_reply(
+            to_email=sender_email,
+            subject=subject,
+            body=body,
+        )
+
+        if send_result.get("status") == "sent":
+            # Add message to history
+            add_message(
+                ticket_id=ticket_id,
+                direction="outbound",
+                body=body,
+            )
+            # Resolve ticket
+            update_ticket_status(ticket_id, "resolved", resolution="manual_reply")
+
+        return {"status": "sent", "gmail_status": send_result.get("status")}
+    except Exception as exc:
+        logger.error("send_manual_reply failed: %s", exc)
+        return {"status": "failed", "error": str(exc)}
+
+
+def generate_ticket_reply(ticket_id: str) -> dict:
+    try:
+        # Get ticket with messages
+        ticket = get_ticket(ticket_id)
+        if not ticket:
+            return {"status": "failed", "error": "Ticket not found"}
+
+        messages = ticket.get("messages", [])
+        if not messages:
+            return {"status": "failed", "error": "No messages found in ticket history"}
+
+        # Build thread context for prompt
+        conversation = []
+        for msg in messages:
+            sender_label = "Customer" if msg["direction"] == "inbound" else "Support"
+            conversation.append(f"{sender_label}: {msg['body']}")
+
+        history_str = "\n\n".join(conversation)
+
+        # Build prompt
+        prompt = (
+            "You are a helpful customer support assistant. Write a polite, professional reply to the customer's latest email "
+            "based on the following thread history. Do not invent details. Keep the tone professional, helpful, and concise.\n\n"
+            "Thread History:\n"
+            f"{history_str}\n\n"
+            "Reply:"
+        )
+
+        from services.llm_router import build_generate_pool
+        router = build_generate_pool()
+        response = router.invoke(prompt)
+
+        return {
+            "status": "success",
+            "reply_body": response.strip()
+        }
+    except Exception as exc:
+        logger.error("generate_ticket_reply failed: %s", exc)
         return {"status": "failed", "error": str(exc)}
