@@ -132,59 +132,86 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
             pass  # Fallback if history_id is somehow not numeric
 
         gmail = GmailService(user_id=resolved_user_id)
-        # Use stored history ID instead of notification history ID
-        message_data = gmail.fetch_latest_message_since(last_history_id)
+        # Fetch all messages since the last history ID
+        messages = gmail.fetch_messages_since(last_history_id)
 
         # Update stored history ID to move the cursor forward
         update_last_history_id(incoming_history_id, user_id)
 
-        if message_data.get("status") in ("failed", "no_new_messages"):
-            logger.info("Skipping push — reason: %s", message_data.get("error"))
+        if not messages:
+            logger.info("Skipping push — reason: No new messages found")
             return {
                 "status": "ignored",
-                "reason": message_data.get("error"),
+                "reason": "No new messages found",
             }
 
-        sender_lower = message_data.get("sender_email", "").lower()
-        
-        # Skip emails sent by the system itself
+        queued_ids = []
+        ignored_messages = []
         current_sender_email = (gmail.sender_email or settings.GMAIL_SENDER_EMAIL).lower()
-        if sender_lower == current_sender_email:
-            logger.info("Skipping outbound email from self")
-            return {"status": "ignored", "reason": "outbound_email"}
-            
-        # Skip bounce and auto-reply emails
-        if sender_lower.startswith("mailer-daemon@") or sender_lower.startswith("postmaster@") or "noreply@" in sender_lower or "no-reply@" in sender_lower:
-            logger.info("Skipping automated/bounce email from %s", sender_lower)
-            return {"status": "ignored", "reason": "automated_email"}
 
-        message_id = message_data.get("message_id")
-        idempotency_key = f"{user_id}:{message_id}"
+        for msg in messages:
+            message_id = msg.get("message_id")
+            if not message_id:
+                continue
 
-        # 2. In-Memory Idempotency Debounce (Saves Supabase DB Calls)
-        if message_id and _is_recently_seen(idempotency_key, RECENT_MESSAGE_IDS, ttl=300):
-            logger.info("Debounced duplicate message in memory: %s", idempotency_key)
-            return {"status": "ignored", "reason": "duplicate_message_in_memory"}
+            sender_lower = msg.get("sender_email", "").lower()
 
-        # 3. GLOBAL MESSAGE DEDUP PIPELINE (Atomic Database Lock)
-        if not acquire_idempotency_lock(idempotency_key, user_id, message_id):
-            logger.info("Idempotency lock already held. Skipping duplicate message: %s", idempotency_key)
-            return {"status": "ignored", "reason": "duplicate"}
-        
-        process_email_background_task.delay(
-            resolved_user_id,
-            {
-                "sender_email": message_data["sender_email"],
-                "subject": message_data["subject"],
-                "body": message_data["body"],
-                "gmail_message_id": message_data.get("message_id"),
-                "idempotency_key": idempotency_key,
+            # Skip emails sent by the system itself
+            if sender_lower == current_sender_email:
+                logger.info("Skipping outbound email from self: %s", message_id)
+                ignored_messages.append({"message_id": message_id, "reason": "outbound_email"})
+                continue
+
+            # Skip bounce and auto-reply emails
+            if sender_lower.startswith("mailer-daemon@") or sender_lower.startswith("postmaster@") or "noreply@" in sender_lower or "no-reply@" in sender_lower:
+                logger.info("Skipping automated/bounce email from %s for message: %s", sender_lower, message_id)
+                ignored_messages.append({"message_id": message_id, "reason": "automated_email"})
+                continue
+
+            idempotency_key = f"{user_id}:{message_id}"
+
+            # 2. In-Memory Idempotency Debounce (Saves Supabase DB Calls)
+            if _is_recently_seen(idempotency_key, RECENT_MESSAGE_IDS, ttl=300):
+                logger.info("Debounced duplicate message in memory: %s", idempotency_key)
+                ignored_messages.append({"message_id": message_id, "reason": "duplicate_message_in_memory"})
+                continue
+
+            # 3. GLOBAL MESSAGE DEDUP PIPELINE (Atomic Database Lock)
+            if not acquire_idempotency_lock(idempotency_key, user_id, message_id):
+                logger.info("Idempotency lock already held. Skipping duplicate message: %s", idempotency_key)
+                ignored_messages.append({"message_id": message_id, "reason": "duplicate"})
+                continue
+
+            try:
+                process_email_background_task.delay(
+                    resolved_user_id,
+                    {
+                        "sender_email": msg["sender_email"],
+                        "subject": msg["subject"],
+                        "body": msg["body"],
+                        "gmail_message_id": message_id,
+                        "idempotency_key": idempotency_key,
+                    }
+                )
+                queued_ids.append(message_id)
+            except Exception as exc:
+                logger.error("Failed to queue background task for message %s: %s", message_id, exc)
+                # If we acquired the lock but the pipeline failed to queue, mark it as failed for safe retries
+                mark_as_processed(idempotency_key=idempotency_key, status="failed")
+                ignored_messages.append({"message_id": message_id, "reason": f"queue_failed: {exc}"})
+
+        if not queued_ids:
+            reasons = ", ".join(set(item["reason"] for item in ignored_messages))
+            return {
+                "status": "ignored",
+                "reason": f"All messages skipped: {reasons}" if reasons else "No messages to process",
+                "details": ignored_messages,
             }
-        )
 
         return {
             "status": "queued",
-            "message_id": message_id
+            "message_ids": queued_ids,
+            "ignored_messages": ignored_messages,
         }
 
     except ValueError as exc:
