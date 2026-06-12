@@ -48,18 +48,15 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Merge env-provided origins with hardcoded defaults
-    default_origins = [
-        "http://localhost:3000",
-        "https://0f8c99b5.email-service-frontend.pages.dev",
-    ]
-    all_origins = list(set(settings.allowed_origins + default_origins))
-    logger.info("CORS allowed origins: %s", all_origins)
+    # TODO: Restrict origins after debugging
+    # Temporarily allow all origins to debug CORS 400 issue
+    all_origins = ["*"]
+    logger.info("CORS: allowing all origins (debug mode)")
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=all_origins,
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
