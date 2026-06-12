@@ -179,69 +179,43 @@ class GmailService:
             logger.error("Gmail watch setup failed: %s", exc)
             return {"status": "failed", "error": str(exc)}
 
-    def fetch_messages_since(self, history_id: str) -> list[dict[str, Any]]:
-        """Fetches all messages added since the given history_id."""
-        message_ids = self._collect_message_ids_since(history_id)
-
-        if not message_ids:
-            logger.info("No new messages for history_id=%s — skipping", history_id)
-            return []
-
-        # Deduplicate message_ids while preserving order
-        seen_ids = set()
-        unique_message_ids = []
-        for msg_id in message_ids:
-            if msg_id not in seen_ids:
-                seen_ids.add(msg_id)
-                unique_message_ids.append(msg_id)
-
-        fetched_messages = []
-        for msg_id in unique_message_ids:
-            try:
-                message = self.service.users().messages().get(
-                    userId="me",
-                    id=msg_id,
-                    format="full",
-                ).execute()
-                parsed_message = self.parse_message(message)
-
-                fetched_messages.append({
-                    "message_id": parsed_message["message_id"],
-                    "thread_id": parsed_message["thread_id"],
-                    "sender_email": parsed_message["sender_email"],
-                    "from_header": parsed_message["from_header"],
-                    "subject": parsed_message["subject"],
-                    "body": parsed_message["body"],
-                    "raw_message": message,
-                })
-            except Exception as exc:
-                logger.error("Failed to fetch individual Gmail message id=%s: %s", msg_id, exc)
-
-        return fetched_messages
-
     def fetch_latest_message_since(self, history_id: str) -> dict[str, object]:
         try:
-            messages = self.fetch_messages_since(history_id)
+            message_ids = self._collect_message_ids_since(history_id)
 
-            if not messages:
+            if not message_ids:
                 logger.info("No new messages for history_id=%s — skipping", history_id)
                 return {
                     "status": "no_new_messages",
                     "error": "No new Gmail messages were found for the supplied history ID",
                 }
 
-            latest_msg = messages[-1]
+            latest_message_id = message_ids[-1]
+            message = self.service.users().messages().get(
+                userId="me",
+                id=latest_message_id,
+                format="full",
+            ).execute()
+
+            parsed_message = self.parse_message(message)
+
             return {
                 "status": "message_fetched",
                 "history_id": history_id,
-                "message_id": latest_msg["message_id"],
-                "thread_id": latest_msg["thread_id"],
-                "sender_email": latest_msg["sender_email"],
-                "from_header": latest_msg["from_header"],
-                "subject": latest_msg["subject"],
-                "body": latest_msg["body"],
-                "raw_message": latest_msg["raw_message"],
+                "message_id": parsed_message["message_id"],
+                "thread_id": parsed_message["thread_id"],
+                "sender_email": parsed_message["sender_email"],
+                "from_header": parsed_message["from_header"],
+                "subject": parsed_message["subject"],
+                "body": parsed_message["body"],
+                "raw_message": message,
             }
         except Exception as exc:
             logger.error("Failed to fetch Gmail message from history: %s", exc)
             return {"status": "failed", "error": str(exc)}
+        
+
+
+#This service provides core functionality for interacting with Gmail, including sending email replies, setting up watches on the inbox, and fetching new messages based on history IDs. It uses Google's official API client and handles OAuth2 authentication using credentials that can be associated with individual users or a system-wide service account. The service also includes robust error handling and logging to facilitate debugging and monitoring of email-related operations.
+# It responsibly decodes incoming messages, extracts relevant information such as sender email, subject, and body, and provides a structured interface for the rest of the application to work with Gmail data. The watch_inbox method allows the application to receive real-time notifications of new emails, while fetch_latest_message_since enables retrieval of email details based on Gmail's history mechanism.
+# It returns structured dictionaries with status and relevant data for each operation, allowing the calling code to easily determine the outcome and handle it accordingly.

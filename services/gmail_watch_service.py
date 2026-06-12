@@ -46,3 +46,10 @@ class GmailWatchService:
 			"attributes": notification.message.attributes,
 			"payload": payload,
 		}
+	
+
+# This service is responsible for parsing incoming Pub/Sub push notifications from Gmail watches.
+# It decodes the base64-encoded message data, extracts the email address and history ID
+# and returns a structured dictionary that can be used by the application to process new email events.
+# in dictionary returned by parse_notification, we include the original subscription name, message ID, history ID, email address, and any additional attributes from the Pub/Sub message for potential future use.
+# in the future, we could expand this service to also handle verification of Pub/Sub messages, manage multiple watch registrations, and implement retry logic for failed notifications.

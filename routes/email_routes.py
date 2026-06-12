@@ -84,6 +84,10 @@ def process_email(
 def watch_gmail(
     current_user: dict = Depends(get_current_user),
 ) -> dict[str, object]:
+    
+    # This endpoint is intended for manual triggering and testing of the Gmail watch functionality.
+    # The actual watch registration is also performed automatically on application startup via the lifespan event.
+    # It watches the Gmail inbox for new emails and updates the last history ID in the database to ensure we don't miss any emails.
     try:
         gmail = GmailService(user_id=current_user["user_id"])
         result = gmail.watch_inbox()
@@ -132,86 +136,59 @@ def gmail_push(notification: PubSubPushRequest) -> dict[str, object]:
             pass  # Fallback if history_id is somehow not numeric
 
         gmail = GmailService(user_id=resolved_user_id)
-        # Fetch all messages since the last history ID
-        messages = gmail.fetch_messages_since(last_history_id)
+        # Use stored history ID instead of notification history ID
+        message_data = gmail.fetch_latest_message_since(last_history_id)
 
         # Update stored history ID to move the cursor forward
         update_last_history_id(incoming_history_id, user_id)
 
-        if not messages:
-            logger.info("Skipping push — reason: No new messages found")
+        if message_data.get("status") in ("failed", "no_new_messages"):
+            logger.info("Skipping push — reason: %s", message_data.get("error"))
             return {
                 "status": "ignored",
-                "reason": "No new messages found",
+                "reason": message_data.get("error"),
             }
 
-        queued_ids = []
-        ignored_messages = []
+        sender_lower = message_data.get("sender_email", "").lower()
+        
+        # Skip emails sent by the system itself
         current_sender_email = (gmail.sender_email or settings.GMAIL_SENDER_EMAIL).lower()
+        if sender_lower == current_sender_email:
+            logger.info("Skipping outbound email from self")
+            return {"status": "ignored", "reason": "outbound_email"}
+            
+        # Skip bounce and auto-reply emails
+        if sender_lower.startswith("mailer-daemon@") or sender_lower.startswith("postmaster@") or "noreply@" in sender_lower or "no-reply@" in sender_lower:
+            logger.info("Skipping automated/bounce email from %s", sender_lower)
+            return {"status": "ignored", "reason": "automated_email"}
 
-        for msg in messages:
-            message_id = msg.get("message_id")
-            if not message_id:
-                continue
+        message_id = message_data.get("message_id")
+        idempotency_key = f"{user_id}:{message_id}"
 
-            sender_lower = msg.get("sender_email", "").lower()
+        # 2. In-Memory Idempotency Debounce (Saves Supabase DB Calls)
+        if message_id and _is_recently_seen(idempotency_key, RECENT_MESSAGE_IDS, ttl=300):
+            logger.info("Debounced duplicate message in memory: %s", idempotency_key)
+            return {"status": "ignored", "reason": "duplicate_message_in_memory"}
 
-            # Skip emails sent by the system itself
-            if sender_lower == current_sender_email:
-                logger.info("Skipping outbound email from self: %s", message_id)
-                ignored_messages.append({"message_id": message_id, "reason": "outbound_email"})
-                continue
-
-            # Skip bounce and auto-reply emails
-            if sender_lower.startswith("mailer-daemon@") or sender_lower.startswith("postmaster@") or "noreply@" in sender_lower or "no-reply@" in sender_lower:
-                logger.info("Skipping automated/bounce email from %s for message: %s", sender_lower, message_id)
-                ignored_messages.append({"message_id": message_id, "reason": "automated_email"})
-                continue
-
-            idempotency_key = f"{user_id}:{message_id}"
-
-            # 2. In-Memory Idempotency Debounce (Saves Supabase DB Calls)
-            if _is_recently_seen(idempotency_key, RECENT_MESSAGE_IDS, ttl=300):
-                logger.info("Debounced duplicate message in memory: %s", idempotency_key)
-                ignored_messages.append({"message_id": message_id, "reason": "duplicate_message_in_memory"})
-                continue
-
-            # 3. GLOBAL MESSAGE DEDUP PIPELINE (Atomic Database Lock)
-            if not acquire_idempotency_lock(idempotency_key, user_id, message_id):
-                logger.info("Idempotency lock already held. Skipping duplicate message: %s", idempotency_key)
-                ignored_messages.append({"message_id": message_id, "reason": "duplicate"})
-                continue
-
-            try:
-                process_email_background_task.delay(
-                    resolved_user_id,
-                    {
-                        "sender_email": msg["sender_email"],
-                        "subject": msg["subject"],
-                        "body": msg["body"],
-                        "gmail_message_id": message_id,
-                        "idempotency_key": idempotency_key,
-                    }
-                )
-                queued_ids.append(message_id)
-            except Exception as exc:
-                logger.error("Failed to queue background task for message %s: %s", message_id, exc)
-                # If we acquired the lock but the pipeline failed to queue, mark it as failed for safe retries
-                mark_as_processed(idempotency_key=idempotency_key, status="failed")
-                ignored_messages.append({"message_id": message_id, "reason": f"queue_failed: {exc}"})
-
-        if not queued_ids:
-            reasons = ", ".join(set(item["reason"] for item in ignored_messages))
-            return {
-                "status": "ignored",
-                "reason": f"All messages skipped: {reasons}" if reasons else "No messages to process",
-                "details": ignored_messages,
+        # 3. GLOBAL MESSAGE DEDUP PIPELINE (Atomic Database Lock)
+        if not acquire_idempotency_lock(idempotency_key, user_id, message_id):
+            logger.info("Idempotency lock already held. Skipping duplicate message: %s", idempotency_key)
+            return {"status": "ignored", "reason": "duplicate"}
+        
+        process_email_background_task.delay(
+            resolved_user_id,
+            {
+                "sender_email": message_data["sender_email"],
+                "subject": message_data["subject"],
+                "body": message_data["body"],
+                "gmail_message_id": message_data.get("message_id"),
+                "idempotency_key": idempotency_key,
             }
+        )
 
         return {
             "status": "queued",
-            "message_ids": queued_ids,
-            "ignored_messages": ignored_messages,
+            "message_id": message_id
         }
 
     except ValueError as exc:
@@ -251,100 +228,3 @@ def upgrade_user_subscription(
     from services.subscription_service import upgrade_subscription
     user_id = current_user["user_id"]
     return upgrade_subscription(user_id, body.tier)
-
-
-class SendEmailRequest(BaseModel):
-    to_email: str
-    subject: str
-    body: str
-
-@router.post("/send-email")
-def send_email(
-    req: SendEmailRequest,
-    current_user: dict = Depends(get_current_user),
-) -> dict:
-    try:
-        user_id = current_user["user_id"]
-
-        if not check_quota(user_id):
-            raise HTTPException(
-                status_code=429,
-                detail="Email quota exceeded. Please upgrade your plan."
-            )
-
-        gmail = GmailService(user_id=user_id)
-        result = gmail.send_reply(
-            to_email=req.to_email,
-            subject=req.subject,
-            body=req.body,
-        )
-
-        if result.get("status") == "failed":
-            raise HTTPException(
-                status_code=500,
-                detail=result.get("error", "Failed to send email")
-            )
-
-        increment_usage(user_id)
-
-        from services.ticket_service import get_or_create_ticket, add_message, update_ticket_status
-        ticket_res = get_or_create_ticket(
-            sender_email=req.to_email,
-            subject=req.subject,
-            user_id=user_id,
-            category="outbound_composed"
-        )
-        ticket = ticket_res.get("ticket")
-        if ticket and ticket.get("id"):
-            ticket_id = ticket["id"]
-            add_message(
-                ticket_id=ticket_id,
-                direction="outbound",
-                body=req.body,
-            )
-            update_ticket_status(ticket_id, "resolved", resolution="manual_reply")
-
-        return {"status": "sent", "to_email": req.to_email}
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("send_email failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-class GenerateComposedRequest(BaseModel):
-    subject: str
-    instructions: str
-    to_email: str | None = None
-
-@router.post("/generate-composed")
-def generate_composed(
-    req: GenerateComposedRequest,
-    current_user: dict = Depends(get_current_user),
-) -> dict:
-    try:
-        user_id = current_user["user_id"]
-        from services.business_service import get_active_config
-        config = get_active_config(user_id)
-        tone = config.get("tone", "friendly")
-        style = config.get("style", "concise")
-
-        prompt = (
-            f"You are a professional customer support assistant. Write a new outbound email to a customer.\n"
-            f"Recipient Email: {req.to_email or 'customer'}\n"
-            f"Subject: {req.subject}\n"
-            f"Instructions on what to say: {req.instructions}\n"
-            f"Tone: {tone}\n"
-            f"Style: {style}\n\n"
-            f"Please write a complete, polite, and professional email body. Do not include placeholders like [Your Name] if you can avoid it; just sign off professionally."
-        )
-
-        from services.llm_router import build_generate_pool
-        llm_pool = build_generate_pool()
-        response = llm_pool.invoke(prompt)
-
-        return {"status": "success", "body": response.strip()}
-    except Exception as exc:
-        logger.error("generate_composed failed: %s", exc)
-        raise HTTPException(status_code=500, detail="Failed to generate email body using AI")
