@@ -213,6 +213,29 @@ class GmailService:
         except Exception as exc:
             logger.error("Failed to fetch Gmail message from history: %s", exc)
             return {"status": "failed", "error": str(exc)}
+
+    def fetch_messages_since(self, history_id: str) -> list[dict[str, Any]]:
+        try:
+            message_ids = self._collect_message_ids_since(history_id)
+
+            if not message_ids:
+                logger.info("No new messages for history_id=%s", history_id)
+                return []
+
+            unique_message_ids = list(dict.fromkeys(message_ids))
+            parsed_messages = []
+            for msg_id in unique_message_ids:
+                message = self.service.users().messages().get(
+                    userId="me",
+                    id=msg_id,
+                    format="full",
+                ).execute()
+                parsed_messages.append(self.parse_message(message))
+
+            return parsed_messages
+        except Exception as exc:
+            logger.error("Failed to fetch Gmail messages from history: %s", exc)
+            return []
         
 
 
