@@ -251,3 +251,100 @@ def upgrade_user_subscription(
     from services.subscription_service import upgrade_subscription
     user_id = current_user["user_id"]
     return upgrade_subscription(user_id, body.tier)
+
+
+class SendEmailRequest(BaseModel):
+    to_email: str
+    subject: str
+    body: str
+
+@router.post("/send-email")
+def send_email(
+    req: SendEmailRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    try:
+        user_id = current_user["user_id"]
+
+        if not check_quota(user_id):
+            raise HTTPException(
+                status_code=429,
+                detail="Email quota exceeded. Please upgrade your plan."
+            )
+
+        gmail = GmailService(user_id=user_id)
+        result = gmail.send_reply(
+            to_email=req.to_email,
+            subject=req.subject,
+            body=req.body,
+        )
+
+        if result.get("status") == "failed":
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("error", "Failed to send email")
+            )
+
+        increment_usage(user_id)
+
+        from services.ticket_service import get_or_create_ticket, add_message, update_ticket_status
+        ticket_res = get_or_create_ticket(
+            sender_email=req.to_email,
+            subject=req.subject,
+            user_id=user_id,
+            category="outbound_composed"
+        )
+        ticket = ticket_res.get("ticket")
+        if ticket and ticket.get("id"):
+            ticket_id = ticket["id"]
+            add_message(
+                ticket_id=ticket_id,
+                direction="outbound",
+                body=req.body,
+            )
+            update_ticket_status(ticket_id, "resolved", resolution="manual_reply")
+
+        return {"status": "sent", "to_email": req.to_email}
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("send_email failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+class GenerateComposedRequest(BaseModel):
+    subject: str
+    instructions: str
+    to_email: str | None = None
+
+@router.post("/generate-composed")
+def generate_composed(
+    req: GenerateComposedRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    try:
+        user_id = current_user["user_id"]
+        from services.business_service import get_active_config
+        config = get_active_config(user_id)
+        tone = config.get("tone", "friendly")
+        style = config.get("style", "concise")
+
+        prompt = (
+            f"You are a professional customer support assistant. Write a new outbound email to a customer.\n"
+            f"Recipient Email: {req.to_email or 'customer'}\n"
+            f"Subject: {req.subject}\n"
+            f"Instructions on what to say: {req.instructions}\n"
+            f"Tone: {tone}\n"
+            f"Style: {style}\n\n"
+            f"Please write a complete, polite, and professional email body. Do not include placeholders like [Your Name] if you can avoid it; just sign off professionally."
+        )
+
+        from services.llm_router import build_generate_pool
+        llm_pool = build_generate_pool()
+        response = llm_pool.invoke(prompt)
+
+        return {"status": "success", "body": response.strip()}
+    except Exception as exc:
+        logger.error("generate_composed failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to generate email body using AI")

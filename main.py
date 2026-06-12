@@ -1,4 +1,6 @@
 import logging
+from dotenv import load_dotenv
+load_dotenv()
 
 from contextlib import asynccontextmanager
 
@@ -15,6 +17,7 @@ from routes.queue_routes import router as queue_router
 from routes.settings_routes import router as settings_router
 from routes.gmail_oauth_routes import router as gmail_oauth_router
 from routes.admin_routes import router as admin_router
+from routes.payment_routes import router as payment_router
 from config.settings import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -85,6 +88,7 @@ def create_app() -> FastAPI:
     app.include_router(business_router)
     app.include_router(gmail_oauth_router)
     app.include_router(admin_router)
+    app.include_router(payment_router)
     app.include_router(task_router) # Include the task status router
     app.include_router(system_routes.router, tags=["System"])
     return app

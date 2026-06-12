@@ -62,7 +62,9 @@ def upgrade_subscription(user_id: str, tier: str) -> dict:
     limits = {
         "free": 25,
         "pro": 500,
-        "enterprise": 1500
+        "pro_yearly": 500,
+        "enterprise": 1500,
+        "enterprise_yearly": 1500
     }
     limit = limits.get(tier.lower(), 50)
     try:

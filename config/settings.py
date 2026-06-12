@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
 
+    # PhonePe
+    PHONEPE_MERCHANT_ID: str = "PGMERCHANTXX"
+    PHONEPE_SALT_KEY: str = "xxxx-xxxx-xxxx-xxxx"
+    PHONEPE_SALT_INDEX: str = "1"
+    PHONEPE_ENV: str = "UAT"
+    PHONEPE_CALLBACK_URL: str = "http://localhost:8000/api/v1/payments/webhook"
+
+
 
 
     ALLOWED_ORIGINS: str = ""
