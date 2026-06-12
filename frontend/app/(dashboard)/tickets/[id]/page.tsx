@@ -1,5 +1,7 @@
 'use client'
 
+export const runtime = 'edge';
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
