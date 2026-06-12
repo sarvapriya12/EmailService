@@ -17,7 +17,7 @@ router = APIRouter(prefix="/auth/gmail", tags=["gmail-oauth"])
 
 # This is where the backend will redirect the user after Google login completes.
 # For local development with React/Vite, this is usually port 5173.
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://0f8c99b5.email-service-frontend.pages.dev")
 
 
 @router.get("/connect")
