@@ -1,0 +1,115 @@
+%%{init: {"theme": "default", "flowchart": {"rankSpacing": 60, "nodeSpacing": 40, "curve": "orthogonal"}}}%%
+flowchart TD
+
+    %% ─── CLIENT ───────────────────────────────────────────────
+    subgraph CLIENT["🖥  CLIENT"]
+        PAYER["Payer's UPI App\nGPay / PhonePe / BHIM"]
+    end
+
+    %% ─── EDGE / SECURITY LAYER ────────────────────────────────
+    subgraph EDGE["🔒  SECURITY LAYER"]
+        RATE["Rate Limiter\nRedis token bucket\n10 req/min per IP"]
+        TLS["TLS Termination\nHTTPS only"]
+        IPLIST["IP Allowlist\nGateway IPs only\n(webhook route)"]
+    end
+
+    %% ─── NEXT.JS FRONTEND ─────────────────────────────────────
+    subgraph FRONTEND["⚛  NEXT.JS FRONTEND"]
+        CHECKOUT["Checkout Page\nGenerates Idempotency-Key\n(sessionStorage)"]
+        QRDISPLAY["QR Display Widget\nRenders base64 PNG\nShows UPI deep-link button"]
+        POLLER["Status Poller\nExponential backoff 3–10s\nTerminates on final state"]
+    end
+
+    %% ─── FASTAPI BACKEND ──────────────────────────────────────
+    subgraph BACKEND["⚡  FASTAPI BACKEND"]
+        INTENT["POST /api/v1/payments/intent\nCreate intent + QR\nIdempotency-Key header required"]
+        STATUS["GET /api/v1/payments/intent/:id/status\nReturns status only — no PII\nOpaque UUID in response"]
+        WEBHOOK["POST /internal/webhooks/upi\nHMAC-SHA256 verify\nStore raw event first"]
+
+        subgraph GUARD["🔑  IDEMPOTENCY GUARD + OPTIMISTIC LOCK"]
+            IDEM["Redis SETNX\nidempotency:{key} → intent_id\nTTL 24h"]
+            DBUNIQ["DB UNIQUE(idempotency_key)\nHard backstop"]
+            CAS["Optimistic lock\nWHERE status='PENDING'\nAND version=N"]
+        end
+    end
+
+    %% ─── DATA LAYER ───────────────────────────────────────────
+    subgraph DATA["🗄  DATA LAYER"]
+        REDIS["Redis\n• Rate limit counters\n• Idempotency keys\n• Cached responses"]
+        PG["PostgreSQL\n• payment_intents\n  (status, version, expires_at)\n• webhook_events\n  (processed flag)"]
+    end
+
+    %% ─── GATEWAY + UPI NETWORK ────────────────────────────────
+    subgraph GW["💳  GATEWAY + UPI NETWORK"]
+        GATEWAY["Payment Gateway\nRazorpay / Cashfree\nHolds payment state\nEmits signed webhooks"]
+        NPCI["NPCI UPI Network\nSettles funds to your VPA\nReal money movement"]
+    end
+
+    %% ─── BACKGROUND JOBS ──────────────────────────────────────
+    subgraph JOBS["⏱  BACKGROUND JOBS (APScheduler)"]
+        TTL["TTL Expiry Job\nEvery 2 min\nPENDING + expired → EXPIRED"]
+        RECON["Reconciliation Job\nCrash recovery\nPolls gateway for stuck PROCESSING"]
+    end
+
+    %% ─── FLOW ARROWS ──────────────────────────────────────────
+
+    %% Payer scans QR
+    PAYER       -->|"1 · scan QR"| QRDISPLAY
+
+    %% Frontend → Edge → Backend (create intent)
+    CHECKOUT    -->|"2 · POST /intent\n+ Idempotency-Key"| RATE
+    RATE        -->|"pass"| TLS
+    TLS         -->|"route"| INTENT
+
+    %% Frontend → Edge → Backend (poll status)
+    POLLER      -->|"3 · GET /status\nevery 3–10s"| TLS
+    TLS         -->|"route"| STATUS
+
+    %% Backend returns QR to frontend
+    INTENT      -.->|"201 · qr_image + upi_link"| QRDISPLAY
+
+    %% Backend → idempotency guard
+    INTENT      --> IDEM
+    IDEM        --> DBUNIQ
+
+    %% Idempotency guard → data layer
+    DBUNIQ      --> PG
+    IDEM        --> REDIS
+
+    %% Status reads from DB
+    STATUS      --> PG
+
+    %% Webhook flow
+    GATEWAY     -->|"webhook\npayment.captured"| IPLIST
+    IPLIST      -->|"allowed IP"| WEBHOOK
+    WEBHOOK     -->|"store raw event"| PG
+    WEBHOOK     --> CAS
+    CAS         -->|"UPDATE status=COMPLETED\nversion+1"| PG
+
+    %% Payer → Gateway → NPCI
+    PAYER       -->|"4 · pay via UPI app"| GATEWAY
+    GATEWAY     <-->|"settle"| NPCI
+
+    %% Data → Gateway (reconcile)
+    RECON       -->|"poll status"| GATEWAY
+    TTL         -->|"mark EXPIRED"| PG
+    RECON       -->|"fix stuck intents"| PG
+
+    %% ─── STYLES ───────────────────────────────────────────────
+    classDef client   fill:#f1efef,stroke:#aaa,color:#333
+    classDef security fill:#fdecea,stroke:#e57373,color:#7f0000
+    classDef frontend fill:#e3f2fd,stroke:#64b5f6,color:#0d47a1
+    classDef apinode  fill:#ede7f6,stroke:#9575cd,color:#311b92
+    classDef guard    fill:#e8f5e9,stroke:#81c784,color:#1b5e20
+    classDef data     fill:#fff8e1,stroke:#ffd54f,color:#6d4c00
+    classDef gateway  fill:#e8f5e9,stroke:#4caf50,color:#1b5e20
+    classDef jobs     fill:#fce4ec,stroke:#f48fb1,color:#880e4f
+
+    class PAYER client
+    class RATE,TLS,IPLIST security
+    class CHECKOUT,QRDISPLAY,POLLER frontend
+    class INTENT,STATUS,WEBHOOK apinode
+    class IDEM,DBUNIQ,CAS guard
+    class REDIS,PG data
+    class GATEWAY,NPCI gateway
+    class TTL,RECON jobs

@@ -1,0 +1,13 @@
+- HttpOnly Cookie Authentication
+- Secure Cookies
+-  SameSite=Lax or Strict
+- CSP Enabled
+- Route Guards
+-  Zod Validation
+- React Query Server State
+-  No JWT in Local Storage
+-  No OAuth Tokens in Browser Storage
+-  No dangerouslySetInnerHTML
+-  DOM Sanitization
+-  Error Boundaries
+- Sentry Monitoring

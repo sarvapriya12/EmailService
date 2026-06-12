@@ -1,0 +1,222 @@
+'use client'
+
+import React from 'react'
+
+export default function RefundPolicyPage() {
+  return (
+    <div className="w-full max-w-7xl mx-auto py-10 px-4 sm:px-6">
+      <div className="bg-white border-2 border-ezen-outline-variant rounded-3xl p-8 sm:p-12 shadow-[6px_6px_0_0_rgba(87,52,79,0.1)] text-ezen-on-surface">
+        <h1 className="font-heading text-3xl sm:text-4xl font-extrabold text-ezen-primary mb-2">
+          Refund Policy
+        </h1>
+        <p className="text-xs text-ezen-outline mb-8 uppercase tracking-wider font-semibold">
+          Last Updated: March 2026
+        </p>
+
+        <div className="space-y-8 text-sm leading-relaxed text-ezen-on-surface-variant font-sans">
+          
+          {/* Section 1 */}
+          <section className="space-y-3">
+            <h2 className="text-xl font-bold text-ezen-primary font-heading">
+              1. Overview
+            </h2>
+            <p>
+              Ezen AI operates as a subscription-based SaaS platform with prepaid messaging and processing capacities. This Refund Policy outlines the terms and conditions under which refunds may be issued for our services.
+            </p>
+            <p>
+              We strive to provide transparent and fair refund practices. Please read this policy carefully to understand your rights and the applicable conditions.
+            </p>
+          </section>
+
+          {/* Section 2 */}
+          <section className="space-y-3">
+            <h2 className="text-xl font-bold text-ezen-primary font-heading">
+              2. Subscription Plans
+            </h2>
+            <p>
+              Ezen AI offers monthly and annual subscription plans that provide access to platform features and include a base allocation of email processing credits.
+            </p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                <strong>Monthly Plans</strong> — Billed at the beginning of each monthly billing cycle. You may cancel at any time, and your access will continue until the end of the current billing period.
+              </li>
+              <li>
+                <strong>Annual Plans</strong> — Billed annually in advance at a discounted rate. Annual plans are eligible for a pro-rata refund for unused full months remaining in the subscription term, provided the request is made within the first 6 months of the subscription.
+              </li>
+              <li>
+                <strong>Plan Upgrades</strong> — If you upgrade your plan mid-cycle, the prorated difference will be charged immediately. No refund is provided for the previous plan tier.
+              </li>
+              <li>
+                <strong>Plan Downgrades</strong> — Downgrades take effect at the start of the next billing cycle. No refund is issued for the difference in the current cycle.
+              </li>
+            </ul>
+          </section>
+
+          {/* Section 3 */}
+          <section className="space-y-3">
+            <h2 className="text-xl font-bold text-ezen-primary font-heading">
+              3. Prepaid Credits
+            </h2>
+            <p>
+              Email capacity and premium AI credits are purchased in advance and deducted on a per-message or per-run basis.
+            </p>
+            
+            <h3 className="font-bold text-ezen-primary mt-4">Refund Eligibility for Credits</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Unused credits may be eligible for a refund if the request is made within 30 days of purchase.</li>
+              <li>Credits that remain unused due to a verified platform service issue or outage are eligible for a refund or credit adjustment.</li>
+              <li>Bulk credit purchases (enterprise packages) are subject to the terms of the specific agreement.</li>
+            </ul>
+
+            <h3 className="font-bold text-ezen-primary mt-4">Non-Refundable Credit Scenarios</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Credits that have already been consumed for message and reply generation (regardless of final read receipts).</li>
+              <li>Credits that were used for emails rejected due to policy violations or invalid recipient formats.</li>
+              <li>Credits included as part of free-tier or promotional allocations.</li>
+              <li>Credits that have expired beyond their validity period.</li>
+            </ul>
+          </section>
+
+          {/* Section 4 */}
+          <section className="space-y-3">
+            <h2 className="text-xl font-bold text-ezen-primary font-heading">
+              4. Non-Refundable Items
+            </h2>
+            <p>
+              The following charges are non-refundable under any circumstances:
+            </p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li><strong>Consumed Processing</strong> — Any credits used for emails that were processed, classified, or generated by the LLM system.</li>
+              <li><strong>Setup & Onboarding Fees</strong> — One-time fees for account setup, domain configuration assistance, or custom API integration work.</li>
+              <li><strong>Partial Month Usage</strong> — No refunds for partial months on monthly subscription plans.</li>
+              <li><strong>Custom Development</strong> — Fees for custom integration modules, tailored preset development, or dedicated professional setup services.</li>
+              <li><strong>Domain & Infrastructure Costs</strong> — Custom domains or dedicated IP addresses provisioned specifically for your account.</li>
+            </ul>
+          </section>
+
+          {/* Section 5 */}
+          <section className="space-y-3">
+            <h2 className="text-xl font-bold text-ezen-primary font-heading">
+              5. Refund Eligibility
+            </h2>
+            <p>
+              You may be eligible for a refund in the following situations:
+            </p>
+            
+            <h3 className="font-bold text-ezen-primary mt-4">Service Disruption</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Verified platform outages that significantly impacted your ability to use the Service, exceeding our 99.9% uptime SLA.</li>
+              <li>Persistent technical issues that were reported to our support team and could not be resolved within a reasonable timeframe.</li>
+            </ul>
+
+            <h3 className="font-bold text-ezen-primary mt-4">Billing Errors</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Duplicate charges or incorrect billing amounts.</li>
+              <li>Charges incurred after a valid cancellation request was submitted.</li>
+            </ul>
+
+            <h3 className="font-bold text-ezen-primary mt-4">Unused Services</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Prepaid credits that remain unused within 30 days of purchase.</li>
+              <li>Annual subscription refunds for unused full months (within the first 6 months).</li>
+            </ul>
+            <p className="mt-2 text-xs italic">
+              We evaluate each refund request on a case-by-case basis and reserve the right to approve or deny refunds at our discretion, based on the specific circumstances.
+            </p>
+          </section>
+
+          {/* Section 6 */}
+          <section className="space-y-3">
+            <h2 className="text-xl font-bold text-ezen-primary font-heading">
+              6. Refund Process
+            </h2>
+            <p>To request a refund, please follow these steps:</p>
+            
+            <h3 className="font-bold text-ezen-primary mt-4">Step 1: Submit Your Request</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Email <a href="mailto:billing@ezen.ai" className="text-ezen-primary underline">billing@ezen.ai</a> with the subject line "Refund Request".</li>
+              <li>Include your account email, invoice number or transaction ID, the amount in question, and a detailed reason for the refund request.</li>
+            </ul>
+
+            <h3 className="font-bold text-ezen-primary mt-4">Step 2: Review Period</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Our billing team will review your request within 3-5 business days.</li>
+              <li>We may contact you for additional information or clarification.</li>
+            </ul>
+
+            <h3 className="font-bold text-ezen-primary mt-4">Step 3: Decision & Processing</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>You will be notified of the decision via email.</li>
+              <li>Approved refunds will be processed within 7-10 business days.</li>
+              <li>Refunds are issued to the original payment method used for the transaction.</li>
+            </ul>
+
+            <div className="bg-ezen-surface-container-low p-4 rounded-xl border border-ezen-outline-variant/30 mt-4 text-xs space-y-1">
+              <p><strong>Timeline Summary:</strong></p>
+              <p>• Request submission: Any time (within 30 days of the charge)</p>
+              <p>• Review period: 3-5 business days</p>
+              <p>• Processing time: 7-10 business days after approval</p>
+              <p>• Bank settlement: 2-3 additional business days</p>
+            </div>
+          </section>
+
+          {/* Section 7 */}
+          <section className="space-y-3">
+            <h2 className="text-xl font-bold text-ezen-primary font-heading">
+              7. Cancellation Policy
+            </h2>
+            <p>You may cancel your Ezen AI subscription at any time:</p>
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                <strong>How to Cancel</strong> — Through the Ezen AI dashboard under Settings &gt; Subscription &gt; Cancel Plan, or by emailing <a href="mailto:billing@ezen.ai" className="text-ezen-primary underline">billing@ezen.ai</a>.
+              </li>
+              <li>
+                <strong>What Happens Upon Cancellation</strong> — Your subscription remains active until the end of the current billing period. You retain access to all platform features until the end of the paid period. Unused messaging/processing credits expire at the end of the billing period.
+              </li>
+              <li>
+                <strong>Data Retention</strong> — Your data will be retained for 30 days post-cancellation, then permanently deleted. You may reactivate your account within 30 days without losing data.
+              </li>
+            </ul>
+          </section>
+
+          {/* Section 8 */}
+          <section className="space-y-3">
+            <h2 className="text-xl font-bold text-ezen-primary font-heading">
+              8. Disputes
+            </h2>
+            <p>
+              If you disagree with a refund decision, you may reply to the decision email with additional documentation supporting your case, or request escalation to a senior billing manager by contacting us at <a href="mailto:support@ezen.ai" className="text-ezen-primary underline">support@ezen.ai</a>.
+            </p>
+          </section>
+
+          {/* Section 9 */}
+          <section className="space-y-3">
+            <h2 className="text-xl font-bold text-ezen-primary font-heading">
+              9. Changes to This Policy
+            </h2>
+            <p>
+              We reserve the right to modify this Refund Policy at any time. Changes will be communicated by updating the "Last Updated" date on this page and notifying registered users via email.
+            </p>
+          </section>
+
+          {/* Section 10 */}
+          <section className="space-y-3">
+            <h2 className="text-xl font-bold text-ezen-primary font-heading">
+              10. Contact Us
+            </h2>
+            <p>
+              For any billing or refund-related questions, please contact us:
+            </p>
+            <ul className="list-unstyled space-y-1">
+              <li>• <strong>Billing Inquiries:</strong> <a href="mailto:billing@ezen.ai" className="text-ezen-primary underline">billing@ezen.ai</a></li>
+              <li>• <strong>General Support:</strong> <a href="mailto:support@ezen.ai" className="text-ezen-primary underline">support@ezen.ai</a></li>
+              <li>• <strong>Website:</strong> <a href="https://ezen.ai" className="text-ezen-primary underline">https://ezen.ai</a></li>
+              <li>• <strong>Address:</strong> Ezen AI, Salem, Tamil Nadu, India</li>
+            </ul>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  )
+}

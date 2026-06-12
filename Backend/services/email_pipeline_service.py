@@ -1,0 +1,213 @@
+import logging
+from typing import Optional
+
+from schemas.email import EmailResponse, ExtractedData
+from services.classifier import EmailClassifier
+from services.email_generator import EmailGenerator
+from services.extractor import EmailExtractor
+from services.gmail_service import GmailService
+from services.llm_router import LLMRouter
+from services.ticket_service import get_or_create_ticket, add_message, update_ticket_status, parse_utc_datetime
+from services.filter_service import is_sender_allowed, is_sender_whitelisted
+from services.approval_service import queue_reply
+from services.settings_service import is_review_mode_enabled
+from services.business_service import get_active_config
+from email_reply_parser import EmailReplyParser
+
+logger = logging.getLogger(__name__)
+
+
+class EmailPipelineService:
+    """Runs the classify -> extract -> generate -> send pipeline."""
+
+    def __init__(
+        self,
+        router: Optional[LLMRouter] = None,
+        gmail: Optional[GmailService] = None,
+        user_id: Optional[str] = None,
+    ) -> None:
+        self.router = router or LLMRouter()
+        self.classifier = EmailClassifier(router=self.router)
+        self.extractor = EmailExtractor(router=self.router)
+        self.generator = EmailGenerator(router=self.router)
+        self.user_id = user_id
+        self.gmail = gmail or GmailService(user_id=self.user_id)
+
+    def process(
+        self,
+        sender_email: str,
+        subject: str,
+        body: str,
+        gmail_message_id: Optional[str] = None,
+    ) -> EmailResponse:
+
+        # Step 1 — Filter check
+        if not is_sender_allowed(sender_email):
+            logger.info("Sender %s blocked by filter — skipping pipeline", sender_email)
+            return EmailResponse(
+                category="filtered",
+                extracted_data=None,
+                generated_reply_subject="",
+                generated_reply_body="",
+                gmail_status="filtered",
+                success=False,
+            )
+            
+        # Step 1.5 — Clean and truncate body
+        # Strip out old email threads, forwarded history, and signatures
+        body = EmailReplyParser.parse_reply(body)
+        
+        # Safety fallback: if it's STILL too huge (e.g. they pasted a massive log file)
+        MAX_BODY_LENGTH = 15000
+        if len(body) > MAX_BODY_LENGTH:
+            logger.warning("Email body exceeds %s characters after parsing. Truncating.", MAX_BODY_LENGTH)
+            body = body[:MAX_BODY_LENGTH] + "\n\n...[EMAIL TRUNCATED DUE TO LENGTH]..."
+
+        # Step 1.8 — Fetch active business config
+        if self.user_id:
+            config = get_active_config(self.user_id)
+        else:
+            config = {
+                "categories": ["billing", "refund", "technical_support", "complaint", "general_inquiry"],
+                "extraction_fields": ["customer_name", "issue", "priority", "reference_number"],
+                "tone": "friendly",
+                "style": "concise"
+            }
+
+        # Step 2 — Classify, extract, generate (with dynamic config)
+        classification = self.classifier.classify(
+            subject=subject, body=body, categories=config.get("categories")
+        )
+        extracted_raw = self.extractor.extract(
+            subject=subject, body=body, fields=config.get("extraction_fields")
+        )
+        reply = self.generator.generate(
+            subject=subject,
+            body=body,
+            extracted=extracted_raw,
+            tone=config.get("tone"),
+            style=config.get("style")
+        )
+
+        # Step 3 — Ticket management
+        ticket_result = None
+        ticket_id = None
+
+        if self.user_id:
+            ticket_result = get_or_create_ticket(
+                sender_email=sender_email,
+                subject=subject,
+                user_id=self.user_id,
+                category=classification["category"],
+            )
+            ticket = ticket_result.get("ticket")
+
+            if ticket:
+                ticket_id = ticket["id"]
+
+                # Store inbound message
+                add_message(
+                    ticket_id=ticket_id,
+                    direction="inbound",
+                    body=body,
+                    gmail_message_id=gmail_message_id,
+                )
+
+                # Also, check if there is another ticket from this sender within 24 hours
+                # (to consider it as an extension of the same problem and skip auto-reply)
+                has_recent_ticket = False
+                if ticket_result.get("created"):
+                    from datetime import timedelta
+                    try:
+                        current_created_at = parse_utc_datetime(ticket["created_at"])
+                        from services.database import _get_client
+                        recent_res = _get_client().table("tickets").select("id, created_at").eq(
+                            "sender_email", sender_email
+                        ).eq("user_id", self.user_id).neq("id", ticket_id).order("created_at", desc=True).execute()
+
+                        if recent_res.data:
+                            latest_prev = recent_res.data[0]
+                            prev_created_at = parse_utc_datetime(latest_prev["created_at"])
+                            if current_created_at and prev_created_at:
+                                if timedelta(seconds=0) < current_created_at - prev_created_at <= timedelta(hours=24):
+                                    has_recent_ticket = True
+                    except Exception as exc:
+                        logger.warning("Failed to check for recent ticket in pipeline: %s", exc)
+
+                # If ticket already existed or is a recent extension — don't send auto-reply
+                if not ticket_result.get("created") or has_recent_ticket:
+                    logger.info(
+                        "Existing or extension ticket %s for sender %s — skipping auto-reply",
+                        ticket_id,
+                        sender_email,
+                    )
+                    return EmailResponse(
+                        category=classification["category"],
+                        extracted_data=ExtractedData(**extracted_raw),
+                        generated_reply_subject=reply["subject"],
+                        generated_reply_body=reply["body"],
+                        gmail_status="skipped_existing_ticket",
+                        success=True,
+                    )
+
+        # Step 4 — Review mode check
+        is_whitelisted = is_sender_whitelisted(sender_email)
+        if is_whitelisted:
+            logger.info("Sender %s is whitelisted — bypassing review mode", sender_email)
+
+        if self.user_id and is_review_mode_enabled(self.user_id) and not is_whitelisted:
+            logger.info("Review mode ON — queuing reply for approval")
+            queue_reply(
+                ticket_id=ticket_id,
+                sender_email=sender_email,
+                reply_subject=reply["subject"],
+                reply_body=reply["body"],
+            )
+
+            return EmailResponse(
+                category=classification["category"],
+                extracted_data=ExtractedData(**extracted_raw),
+                generated_reply_subject=reply["subject"],
+                generated_reply_body=reply["body"],
+                gmail_status="queued_for_review",
+                success=True,
+            )
+
+        # Step 5 — Send reply
+        gmail_result = self.gmail.send_reply(
+            to_email=sender_email,
+            subject=reply["subject"],
+            body=reply["body"],
+        )
+
+        # Step 6 — Store outbound message in ticket and resolve
+        if ticket_id:
+            add_message(
+                ticket_id=ticket_id,
+                direction="outbound",
+                body=reply["body"],
+            )
+            update_ticket_status(ticket_id, "resolved", resolution="auto_sent")
+
+        return EmailResponse(
+            category=classification["category"],
+            extracted_data=ExtractedData(**extracted_raw),
+            generated_reply_subject=reply["subject"],
+            generated_reply_body=reply["body"],
+            gmail_status=gmail_result["status"],
+            success=gmail_result["status"] == "sent",
+        )
+
+    def process_incoming_email(
+        self,
+        sender_email: str,
+        subject: str,
+        body: str,
+        gmail_message_id: Optional[str] = None,
+    ) -> EmailResponse:
+        return self.process(
+            sender_email=sender_email,
+            subject=subject,
+            body=body,
+            gmail_message_id=gmail_message_id,
+        )

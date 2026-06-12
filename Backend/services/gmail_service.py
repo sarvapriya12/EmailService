@@ -1,0 +1,244 @@
+import base64
+from email.utils import parseaddr
+import logging
+from email.mime.text import MIMEText
+from typing import Any, Optional
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+
+from config.settings import settings
+
+logger = logging.getLogger(__name__)
+
+
+class GmailService:
+    """Sends replies through Gmail."""
+
+    def __init__(self, user_id: Optional[str] = None) -> None:
+        self.user_id = user_id
+        self.sender_email = settings.GMAIL_SENDER_EMAIL
+        self.service = self._build_service()
+
+    def _build_service(self):
+        creds = None
+        if self.user_id:
+            from services.gmail_oauth_service import get_credentials, is_connected
+            creds = get_credentials(self.user_id)
+            if creds:
+                conn_info = is_connected(self.user_id)
+                if conn_info.get("connected"):
+                    self.sender_email = conn_info["email"]
+
+        if not creds:
+            creds = Credentials(
+                token=None,
+                refresh_token=settings.GMAIL_REFRESH_TOKEN,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=settings.GMAIL_CLIENT_ID,
+                client_secret=settings.GMAIL_CLIENT_SECRET,
+            )
+            creds.refresh(Request())
+        return build("gmail", "v1", credentials=creds)
+
+    @staticmethod
+    def decode_base64url_text(data: str) -> str:
+        padded_data = data + ("=" * (-len(data) % 4))
+        return base64.urlsafe_b64decode(padded_data.encode("utf-8")).decode("utf-8")
+
+    @staticmethod
+    def extract_sender_email(from_header: str) -> str:
+        _, email_address = parseaddr(from_header)
+        return email_address or from_header.strip()
+
+    @staticmethod
+    def extract_message_text(payload: dict[str, Any]) -> str:
+        body = payload.get("body", {}) or {}
+        data = body.get("data")
+
+        if data:
+            return GmailService.decode_base64url_text(data)
+
+        for part in payload.get("parts", []) or []:
+            if part.get("mimeType") == "text/plain":
+                text = GmailService.extract_message_text(part)
+                if text:
+                    return text
+
+        for part in payload.get("parts", []) or []:
+            text = GmailService.extract_message_text(part)
+            if text:
+                return text
+
+        return ""
+
+    @staticmethod
+    def parse_message(message: dict[str, Any]) -> dict[str, str]:
+        payload = message.get("payload", {}) or {}
+        headers = {
+            str(header.get("name", "")).lower(): str(header.get("value", ""))
+            for header in payload.get("headers", []) or []
+        }
+
+        from_header = headers.get("from", "").strip()
+
+        return {
+            "message_id": str(message.get("id", "")).strip(),
+            "thread_id": str(message.get("threadId", "")).strip(),
+            "sender_email": GmailService.extract_sender_email(from_header),
+            "from_header": from_header,
+            "subject": headers.get("subject", "").strip(),
+            "body": GmailService.extract_message_text(payload).strip(),
+        }
+
+    def _collect_message_ids_since(self, history_id: str) -> list[str]:
+        message_ids: list[str] = []
+        page_token: str | None = None
+
+        # Subtract 1 from history_id to catch messages at exact boundary
+        try:
+            start_id = str(max(1, int(history_id) - 1))
+        except ValueError:
+            start_id = history_id
+
+        while True:
+            response = self.service.users().history().list(
+            userId="me",
+            startHistoryId=start_id,
+            historyTypes=["messageAdded"],
+            pageToken=page_token,
+            )  .execute()
+
+            #logger.warning("RAW HISTORY RESPONSE: %s", response) 
+
+            for history_item in response.get("history", []) or []:
+                for message_added in history_item.get("messagesAdded", []) or []:
+                    message = message_added.get("message", {}) or {}
+                    message_id = str(message.get("id", "")).strip()
+
+                    if message_id:
+                        message_ids.append(message_id)
+
+            page_token = response.get("nextPageToken")
+
+            if not page_token:
+                break
+
+        return message_ids
+
+    def send_reply(self, to_email: str, subject: str, body: str) -> dict[str, str]:
+        logger.info("Preparing Gmail send for %s", to_email)
+        try:
+            message = MIMEText(body)
+            message["to"] = to_email
+            message["from"] = self.sender_email
+            message["subject"] = subject
+
+            encoded = base64.urlsafe_b64encode(
+                message.as_bytes()
+            ).decode()
+
+            self.service.users().messages().send(
+                userId="me",
+                body={"raw": encoded},
+            ).execute()
+
+            logger.info("Email sent to %s", to_email)
+            return {"status": "sent", "to_email": to_email}
+
+        except Exception as exc:
+            logger.error("Gmail send failed: %s", exc)
+            return {"status": "failed", "error": str(exc)}
+
+    def watch_inbox(self) -> dict[str, object]:
+        if not settings.GMAIL_WATCH_TOPIC_NAME:
+            return {
+                "status": "failed",
+                "error": "GMAIL_WATCH_TOPIC_NAME is not configured",
+            }
+
+        try:
+            response = self.service.users().watch(
+                userId="me",
+                body={
+                    "topicName": settings.GMAIL_WATCH_TOPIC_NAME,
+                    "labelIds": ["INBOX"],
+                    "labelFilterAction": "include",
+                },
+            ).execute()
+
+            return {
+                "status": "watch_started",
+                "email_address": response.get("emailAddress"),
+                "history_id": response.get("historyId"),
+                "expiration": response.get("expiration"),
+                "raw_response": response,
+            }
+        except Exception as exc:
+            logger.error("Gmail watch setup failed: %s", exc)
+            return {"status": "failed", "error": str(exc)}
+
+    def fetch_latest_message_since(self, history_id: str) -> dict[str, object]:
+        try:
+            message_ids = self._collect_message_ids_since(history_id)
+
+            if not message_ids:
+                logger.info("No new messages for history_id=%s — skipping", history_id)
+                return {
+                    "status": "no_new_messages",
+                    "error": "No new Gmail messages were found for the supplied history ID",
+                }
+
+            latest_message_id = message_ids[-1]
+            message = self.service.users().messages().get(
+                userId="me",
+                id=latest_message_id,
+                format="full",
+            ).execute()
+
+            parsed_message = self.parse_message(message)
+
+            return {
+                "status": "message_fetched",
+                "history_id": history_id,
+                "message_id": parsed_message["message_id"],
+                "thread_id": parsed_message["thread_id"],
+                "sender_email": parsed_message["sender_email"],
+                "from_header": parsed_message["from_header"],
+                "subject": parsed_message["subject"],
+                "body": parsed_message["body"],
+                "raw_message": message,
+            }
+        except Exception as exc:
+            logger.error("Failed to fetch Gmail message from history: %s", exc)
+            return {"status": "failed", "error": str(exc)}
+
+    def fetch_messages_since(self, history_id: str) -> list[dict[str, Any]]:
+        try:
+            message_ids = self._collect_message_ids_since(history_id)
+
+            if not message_ids:
+                logger.info("No new messages for history_id=%s", history_id)
+                return []
+
+            unique_message_ids = list(dict.fromkeys(message_ids))
+            parsed_messages = []
+            for msg_id in unique_message_ids:
+                message = self.service.users().messages().get(
+                    userId="me",
+                    id=msg_id,
+                    format="full",
+                ).execute()
+                parsed_messages.append(self.parse_message(message))
+
+            return parsed_messages
+        except Exception as exc:
+            logger.error("Failed to fetch Gmail messages from history: %s", exc)
+            return []
+        
+
+
+#This service provides core functionality for interacting with Gmail, including sending email replies, setting up watches on the inbox, and fetching new messages based on history IDs. It uses Google's official API client and handles OAuth2 authentication using credentials that can be associated with individual users or a system-wide service account. The service also includes robust error handling and logging to facilitate debugging and monitoring of email-related operations.
+# It responsibly decodes incoming messages, extracts relevant information such as sender email, subject, and body, and provides a structured interface for the rest of the application to work with Gmail data. The watch_inbox method allows the application to receive real-time notifications of new emails, while fetch_latest_message_since enables retrieval of email details based on Gmail's history mechanism.
+# It returns structured dictionaries with status and relevant data for each operation, allowing the calling code to easily determine the outcome and handle it accordingly.
