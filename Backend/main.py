@@ -49,16 +49,14 @@ def create_app() -> FastAPI:
     )
 
     # CORS: allow frontend origins
-    default_origins = [
-        "http://localhost:3000",
-        "https://0f8c99b5.email-service-frontend.pages.dev",
-    ]
-    all_origins = list(set(settings.allowed_origins + default_origins))
-    logger.info("CORS allowed origins: %s", all_origins)
-
+    # Use regex to match all Cloudflare Pages preview subdomains
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=all_origins,
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:5173",
+        ],
+        allow_origin_regex=r"https://.*\.email-service-frontend\.pages\.dev",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
