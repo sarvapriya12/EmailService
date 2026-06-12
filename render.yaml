@@ -5,4 +5,5 @@ services:
     plan: starter
     autoDeploy: false
     healthCheckPath: /health
-    dockerfilePath: ./Dockerfile
+    rootDir: Backend
+    dockerfilePath: Dockerfile
