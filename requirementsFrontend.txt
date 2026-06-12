@@ -1,0 +1,20 @@
+# Core
+axios
+zustand
+@tanstack/react-query
+
+# Forms & Validation
+react-hook-form
+zod
+@hookform/resolvers
+
+# UI
+lucide-react
+sonner
+
+# Charts
+recharts
+
+# Utilities
+date-fns
+jwt-decode
